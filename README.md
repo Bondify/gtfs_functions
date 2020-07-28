@@ -52,6 +52,8 @@ The function `map_gdf` allows the user to see the results of the process in a ma
                       tooltip_varc = ['route_name'] , 
                       tooltip_labels = ['Route: ], 
                       breaks = [5, 10, 20, 50])
+                      
+![Map](/assets/images/tux.png)
 
 ## Export the dataframe
 Besides the [normal ways of saving geodataframes to geospatial files](https://geopandas.org/io.html#writing-spatial-data), the function `save_gdf` allows the user to save the file as a **shapefile** and/or **geojson** in the same line.
