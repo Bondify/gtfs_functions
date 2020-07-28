@@ -40,7 +40,8 @@ The `stops_freq` function takes `stop_times` and  `stops` created in the previou
 ## Map the results
 The function `map_gdf` allows the user to see the results of the process in a map in an easy way. The user has the option to specify a color palette (or leave the default) as well as to add variables and its labels to the tooltips as lists.
 
-`condition_route = speeds_gdf.route_name == 'Route 1'
+`
+condition_route = speeds_gdf.route_name == 'Route 1'
 condition_dir = speeds_gdf.dir_id == 'Inbound'
 condition_window = speeds_gdf.window == '6:00-9:00'
 
@@ -52,7 +53,8 @@ m = gtfs.map_gdf(gdf = gdf,
                  tooltip_varc = ['route_name'] , 
                  tooltip_labels = ['Route: ], 
                  breaks = [5, 10, 20, 50])
-m`
+m
+`
 
 ## Export the dataframe
 Besides the [normal ways of saving geodataframes to geospatial files](https://geopandas.org/io.html#writing-spatial-data), the function `save_gdf` allows the user to save the file as a **shapefile** and/or **geojson** in the same line.
