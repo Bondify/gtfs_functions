@@ -11,8 +11,8 @@ It is still in its testing face.
 The function `import_gtfs` takes the path or the zip file as argument and returns 5 dataframes/geodataframes and a list. 
 The first 5 dataframes are self explanatory. The list is just a list that contains the other 5 dataframes. 
 
-  import gtfs_functions as gtfs
-  routes, stops, stop_times, trips, shapes, gtfs_list = gtfs.import_gtfs("my_gtfs.zip")
+    import gtfs_functions as gtfs
+    routes, stops, stop_times, trips, shapes, gtfs_list = gtfs.import_gtfs("my_gtfs.zip")
   
 ` import gtfs_functions as gtfs
 routes, stops, stop_times, trips, shapes, gtfs_list = gtfs.import_gtfs("my_gtfs.zip")`
