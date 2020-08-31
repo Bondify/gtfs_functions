@@ -32,14 +32,14 @@ def save_gdf(data, file_name, geojson=False, shapefile=True):
             driver = 'ESRI Shapefile',
             filename = shape_path,
             )
-    # create the .prj file
-    prj_name = file_name + '.prj'
-    prj = open(prj_name, "w")
-    
-    prj_write = 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]]'
-    # call the function and supply the epsg code
-    prj.write(prj_write)
-    prj.close()
+        # create the .prj file
+        prj_name = file_name + '.prj'
+        prj = open(prj_name, "w")
+        
+        prj_write = 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]]'
+        # call the function and supply the epsg code
+        prj.write(prj_write)
+        prj.close()
     
     if shapefile:
         extensions = ['.cpg', '.dbf','.prj', '.shp', '.shx']
@@ -51,12 +51,14 @@ def save_gdf(data, file_name, geojson=False, shapefile=True):
             os.remove(file_name + ex) # in case I want to remove the files out of the shapefile
     
         zipObj.close()
+        
     
-def import_gtfs(gtfs_path):
+def import_gtfs(gtfs_path, busiest_date = True):
     import warnings
     warnings.filterwarnings("ignore")
     import os
     import pandas as pd
+    import zipfile
 
     try:
         import partridge as ptg 
@@ -66,8 +68,16 @@ def import_gtfs(gtfs_path):
     # Partridge to read the feed
     # service_ids = pd.read_csv(gtfs_path + '/trips.txt')['service_id'].unique()
     # service_ids = frozenset(tuple(service_ids))
-    
-    service_ids = ptg.read_busiest_date(gtfs_path)[1]
+        
+    if busiest_date:
+        service_ids = ptg.read_busiest_date(gtfs_path)[1]
+    else:
+        with zipfile.ZipFile(gtfs_path) as myzip:
+            myzip.extract("trips.txt")
+        service_ids = pd.read_csv('trips.txt')['service_id'].unique()
+        service_ids = frozenset(tuple(service_ids))
+        os.remove('trips.txt')
+        
     view = {'trips.txt': {'service_id': service_ids}}
     
     feed = ptg.load_geo_feed(gtfs_path, view)
@@ -706,15 +716,21 @@ def speeds_from_gtfs(gtfs_list, segments_gdf, cutoffs = [0,6,9,15,19,22,24]):
     speeds['speed'] = round(speeds['distance_m']/1000/speeds['runtime_h'])
     speeds = speeds.loc[~speeds.speed.isnull()]
     
-    avg_speed_route = speeds.pivot_table(
-    'speed',
-    index=['route_id', 'direction_id','window'],
-    aggfunc='mean'
-                                    ).reset_index()
+    # Calculate average speed to modify outliers
+    avg_speed_route = speeds.pivot_table('speed',
+                                         index=['route_id', 'direction_id','window'],
+                                         aggfunc='mean').reset_index()
     avg_speed_route.rename(columns={'speed':'avg_speed_route'}, inplace=True)
-    
+    # Assign average speed to outliers
     speeds = pd.merge(speeds, avg_speed_route, how='left')
     speeds.loc[speeds.speed>120,'speed'] = speeds.loc[speeds.speed>120,'avg_speed_route']
+    
+    # Calculate max speed per segment to have a free_flow reference
+    max_speed_segment = speeds.pivot_table('speed',
+                                           index = ['stop_id', 'direction_id'],
+                                           aggfunc='max')
+    max_speed_segment.rename(columns={'speed':'max_kmh'}, inplace=True)
+    
     
     # Get the average per route, direction, segment and time of day
     speeds_agg = speeds.pivot_table(['speed', 'runtime_h', 'avg_speed_route'],
@@ -779,13 +795,17 @@ def speeds_from_gtfs(gtfs_list, segments_gdf, cutoffs = [0,6,9,15,19,22,24]):
     data_complete1 = data_complete1.loc[:,['route_id', 'route_name','direction_id','segment_id', 'window',
                                            'speed', 
                                            'start_stop_id', 'start_stop_name', 'end_stop_id','end_stop_name', 
-                                           'distance_m','stop_sequence', 'shape_id', 'runtime_h','geometry', ]]    
-        
+                                           'distance_m','stop_sequence', 'shape_id', 'runtime_h','geometry', ]]       
         
     data_complete1.columns =  ['route_id', 'route_name','dir_id', 'segment_id','window', 
                                'speed',
                                's_st_id', 's_st_name', 'e_st_id','e_st_name',
                                'distance_m', 'stop_seq', 'shape_id','runtime_h', 'geometry']
+    
+    # Assign max speeds to each segment
+    data_complete1 = pd.merge(data_complete1, max_speed_segment,
+                              left_on=['s_st_id', 'dir_id'], right_on = ['stop_id', 'direction_id'],
+                              how='left')
     
     gdf = gpd.GeoDataFrame(data = data_complete1.drop('geometry', axis=1), geometry=data_complete1.geometry)
     
@@ -794,6 +814,7 @@ def speeds_from_gtfs(gtfs_list, segments_gdf, cutoffs = [0,6,9,15,19,22,24]):
     
     gdf.rename(columns={'speed': 'speed_kmh'}, inplace=True)
     gdf['speed_mph'] = gdf['speed_kmh']*0.621371
+    gdf['max_mph'] = gdf['max_kmh']*0.621371
     return gdf
     
 def create_json(gdf, variable, filename,
@@ -895,7 +916,7 @@ def create_json(gdf, variable, filename,
               dataCol = 'route_name',
               defaultValue = 'All lines'
               )
-      elif f != 'window':
+      elif (f != 'window')&(f != 'day_type'):
         if default_values[filter_variables.index(f)] == True:
             aux = dict(
                 values = [str(x) for x in gdf[f].sort_values(ascending=True).unique()],
@@ -907,7 +928,7 @@ def create_json(gdf, variable, filename,
                 values = [str(x) for x in gdf[f].sort_values(ascending=True).unique()],
                 dataCol = f
                 )
-      else:
+      elif f == 'window':
         if len(sort_windows.window.unique())> 1:
             default_val = list(sort_windows.window.unique())[1]
         else:
@@ -916,6 +937,12 @@ def create_json(gdf, variable, filename,
             values = list(sort_windows.window.unique()),
             dataCol = 'window',
             defaultValue = default_val
+            )
+      elif f == 'day_type':
+          aux = dict(
+            values = ['Weekday', 'Saturday', 'Sunday'],
+            dataCol = 'day_type',
+            defaultValue = 'Weekday'
             )
       filterableColumns = filterableColumns + [aux]
   
@@ -1368,34 +1395,3 @@ def segments_freq(segments_gdf, stop_times, routes, cutoffs = [0,6,9,15,19,22,24
     gdf.sort_values(by='frequency', ascending=False, inplace=True)
     
     return gdf
-
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
