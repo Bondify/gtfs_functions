@@ -1,4 +1,4 @@
-# GTFS LAYERS
+# GTFS FUNCTIONS
 
 This package allows you to create various layers directly from the GTFS and visualize the results in the most straightforward way possible.
 It is still in its testing face.
