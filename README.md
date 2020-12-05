@@ -976,3 +976,150 @@ m = kp.KeplerGl(data=dict(data=seg_freq, name='Segment frequency'), height=400)
 m
 ```
 ![kepler_segment_freq](/images/kepler_seg_freq.jpg)
+
+# Other plots <a class="anchor" id="plotly"></a>
+## Histogram
+```python
+# Histogram
+import plotly.express as px
+px.histogram(
+    stop_freq.loc[stop_freq.frequency<50], 
+    x='frequency', 
+    title='Stop frequencies',
+    template='simple_white', 
+    nbins =20)
+```
+![histogram](/images/histogram.jpg)
+
+## Heatmap
+```python
+# Heatmap
+import plotly.graph_objects as go
+dir_0 = speeds.loc[(speeds.dir_id=='Inbound')&(speeds.route_name=='1 CALIFORNIA')].sort_values(by='stop_seq') 
+dir_0['hour'] = dir_0.window.apply(lambda x: int(x.split(':')[0]))
+dir_0.sort_values(by='hour', ascending=True, inplace=True)
+
+fig = go.Figure(data=go.Heatmap(
+                   z=dir_0.speed_kmh,
+                   y=dir_0.s_st_name,
+                   x=dir_0.window,
+                   hoverongaps = False,
+                   colorscale=px.colors.colorbrewer.RdYlBu, 
+                   reversescale=False
+))
+
+fig.update_yaxes(title_text='Stop', autorange='reversed')
+fig.update_xaxes(title_text='Hour of day', side='top')
+fig.update_layout(showlegend=False, height=600, width=1000,
+                 title='Speed heatmap per direction and hour of the day')
+
+fig.show()
+```
+![heatmap](/images/heatmap.jpg)
+
+## Line chart
+```python
+by_hour = speeds.pivot_table('speed_kmh', index = ['window'], aggfunc = ['mean','std'] ).reset_index()
+by_hour.columns = ['_'.join(col).strip() for col in by_hour.columns.values]
+by_hour['hour'] = by_hour.window_.apply(lambda x: int(x.split(':')[0]))
+by_hour.sort_values(by='hour', ascending=True, inplace=True)
+
+# Scatter
+fig = px.line(by_hour, 
+           x='window_', 
+           y='mean_speed_kmh', 
+           template='simple_white', 
+           #error_y = 'std_speed_kmh'
+                )
+
+fig.update_yaxes(rangemode='tozero')
+
+fig.show()
+```
+![line_chart](/images/speed_hour.jpg)
+
+## Fancy line chart
+```python
+# Line graphs
+import plotly.graph_objects as go
+example2 = speeds.loc[(speeds.s_st_name=='Fillmore St & Bay St')&(speeds.route_name=='All lines')].sort_values(by='stop_seq') 
+example2['hour'] = example2.window.apply(lambda x: int(x.split(':')[0]))
+example2.sort_values(by='hour', ascending=True, inplace=True)
+
+fig = go.Figure()
+
+trace = go.Scatter(
+    name='Speed',
+    x=example2.hour, 
+    y=example2.speed_kmh,
+    mode='lines',
+    line=dict(color='rgb(31, 119, 180)'),
+    fillcolor='#F0F0F0',
+    fill='tonexty',
+    opacity = 0.5)
+
+
+data = [trace]
+
+layout = go.Layout(
+    yaxis=dict(title='Average Speed (km/h)'),
+    xaxis=dict(title='Hour of day'),
+    title='Average Speed by hour of day in stop Fillmore St & Bay St',
+    showlegend = False, template = 'simple_white')
+
+fig = go.Figure(data=data, layout=layout)
+
+# Get the labels in the X axis right
+axes_labels = [] 
+tickvals=example2.hour.unique()[::3][1:]
+
+for i in range(0, len(tickvals)):
+    label = str(tickvals[i]) + ':00'
+    axes_labels.append(label)
+
+fig.update_xaxes(
+    ticktext=axes_labels,
+    tickvals=tickvals
+)
+
+# Add vertical lines
+y_max_value = example2.speed_kmh.max()
+
+for i in range(0, len(tickvals)):
+    fig.add_shape(
+        # Line Vertical
+        dict(
+            type="line",
+            x0=tickvals[i],
+            y0=0,
+            x1=tickvals[i],
+            y1=y_max_value,
+            line=dict(
+                color="Grey",
+                width=1
+            )
+        )
+    )
+    
+# Labels in the edge values
+for i in range(0, len(tickvals)):    
+    y_value = example2.loc[example2.hour==tickvals[i], 'speed_kmh'].values[0].round(2)
+    fig.add_annotation(
+        x=tickvals[i],
+        y=y_value,
+        text=str(y_value),
+    )
+fig.update_annotations(dict(
+            xref="x",
+            yref="y",
+            showarrow=True,
+            arrowhead=0,
+            ax=0,
+            ay=-18
+))
+
+fig.update_yaxes(rangemode='tozero')
+
+fig.show()
+```
+![line_chart](/images/fancy speed per hour.jpg)
