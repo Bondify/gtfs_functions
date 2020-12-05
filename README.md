@@ -938,4 +938,4 @@ gtfs.map_gdf(gdf = gdf,
               tooltip_labels = ['Frequency: '], 
               breaks = [10, 20, 30, 40, 120, 200])
 ```
-[stops]('images/map_stop_freq.jpg')
+![stops](/images/map_stop_freq.jpg)
