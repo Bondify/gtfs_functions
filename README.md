@@ -1122,4 +1122,4 @@ fig.update_yaxes(rangemode='tozero')
 
 fig.show()
 ```
-![line_chart](/images/fancy speed per hour.jpg)
+![line_chart](/images/fancy_speed_per_hour.jpg)
