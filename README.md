@@ -921,3 +921,21 @@ seg_freq.loc[(seg_freq.segment_id=='3114-3144')&(seg_freq.window=='0:00-6:00')]
 file_name = 'stop_frequencies'
 gtfs.save_gdf(stop_frequencies_gdf, file_name, shapefile=True, geojson=True)
 ```
+
+# Map your work <a class="anchor" id="map_gdf"></a>
+
+```python
+# Stops
+condition_dir = stop_freq.dir_id == 'Inbound'
+condition_window = stop_freq.window == '6:00-9:00'
+
+gdf = stop_freq.loc[(condition_dir & condition_window),:].reset_index()
+
+gtfs.map_gdf(gdf = gdf, 
+              variable = 'ntrips', 
+              colors = ["#d13870", "#e895b3" ,'#55d992', '#3ab071', '#0e8955','#066a40'], 
+              tooltip_var = ['frequency'] , 
+              tooltip_labels = ['Frequency: '], 
+              breaks = [10, 20, 30, 40, 120, 200])
+```
+[stops]('images/map_stop_freq.jpg')
