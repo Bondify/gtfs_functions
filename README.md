@@ -924,6 +924,7 @@ gtfs.save_gdf(stop_frequencies_gdf, file_name, shapefile=True, geojson=True)
 
 # Map your work <a class="anchor" id="map_gdf"></a>
 
+## Stop frequencies
 ```python
 # Stops
 condition_dir = stop_freq.dir_id == 'Inbound'
@@ -939,3 +940,39 @@ gtfs.map_gdf(gdf = gdf,
               breaks = [10, 20, 30, 40, 120, 200])
 ```
 ![stops](/images/map_stop_freq.jpg)
+
+## Line frequencies
+```python
+# Line frequencies
+condition_dir = line_freq.dir_id == 'Inbound'
+condition_window = line_freq.window == '6:00-9:00'
+
+gdf = line_freq.loc[(condition_dir & condition_window),:].reset_index()
+
+gtfs.map_gdf(gdf = gdf, 
+              variable = 'ntrips', 
+              colors = ["#d13870", "#e895b3" ,'#55d992', '#3ab071', '#0e8955','#066a40'], 
+              tooltip_var = ['route_name'] , 
+              tooltip_labels = ['Route: '], 
+              breaks = [5, 10, 20, 50])
+```
+![line](/images/map_line_freq.jpg)
+
+## Speeds
+If you are looking to visualize data at the segment level for all lines I recommend you go with something more powerful like kepler.gl (AKA my favorite data viz library). For example, to check the scheduled speeds per segment:
+```python
+# Speeds
+import keplergl as kp
+m = kp.KeplerGl(data=dict(data=speeds, name='Speed Lines'), height=400)
+m
+```
+![kepler_speeds](/images/kepler_speeds.jpg)
+
+## Segment frequencies
+```python
+# Segment frequencies
+import keplergl as kp
+m = kp.KeplerGl(data=dict(data=seg_freq, name='Segment frequency'), height=400)
+m
+```
+![kepler_segment_freq](/images/kepler_seg_freq.jpg)
