@@ -88,8 +88,11 @@ def import_gtfs(gtfs_path, busiest_date = True):
     shapes = feed.shapes
     
     # Get routes info in trips
-    trips = pd.merge(trips, routes, how='left').loc[:, ['trip_id', 'route_id',
-                                                        'service_id', 'direction_id','shape_id']]
+    # The GTFS feed might be missing some of the keys, e.g. direction_id or shape_id.
+    # To allow processing incomplete GTFS data, we must reindex instead:
+    # https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#deprecate-loc-reindex-listlike
+    trips = pd.merge(trips, routes, how='left').reindex(columns=['trip_id', 'route_id',
+                                                        'service_id', 'direction_id','shape_id'])
     
     # Get trips, routes and stops info in stop_times
     stop_times = pd.merge(stop_times, trips, how='left') 
