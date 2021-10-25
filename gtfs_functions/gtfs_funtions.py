@@ -64,6 +64,12 @@ def import_gtfs(gtfs_path, busiest_date = True):
     except ImportError as e:
         os.system('pip install partridge')
         import partridge as ptg
+
+    try:
+        import geopandas as gpd
+    except ImportError as e:
+        os.system('pip install geopandas')
+        import geopandas as gpd
     # Partridge to read the feed
     # service_ids = pd.read_csv(gtfs_path + '/trips.txt')['service_id'].unique()
     # service_ids = frozenset(tuple(service_ids))
@@ -97,6 +103,8 @@ def import_gtfs(gtfs_path, busiest_date = True):
     # Get trips, routes and stops info in stop_times
     stop_times = pd.merge(stop_times, trips, how='left') 
     stop_times = pd.merge(stop_times, stops, how='left')
+    # stop_times needs to be geodataframe if we want to do geometry operations
+    stop_times = gpd.GeoDataFrame(stop_times, geometry='geometry')
     
     return routes, stops, stop_times, trips, shapes
 
