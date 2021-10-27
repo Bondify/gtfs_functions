@@ -97,6 +97,7 @@ def import_gtfs(gtfs_path, busiest_date = True):
     # The GTFS feed might be missing some of the keys, e.g. direction_id or shape_id.
     # To allow processing incomplete GTFS data, we must reindex instead:
     # https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#deprecate-loc-reindex-listlike
+    # This will add NaN for any missing columns.
     trips = pd.merge(trips, routes, how='left').reindex(columns=['trip_id', 'route_id',
                                                         'service_id', 'direction_id','shape_id'])
     
@@ -150,6 +151,12 @@ def cut_gtfs(stop_times, stops, shapes):
         return epsg_code
 
     epsg = code(zone)
+
+    # direction_id is optional, as it is not needed to determine route shapes
+    # However, if direction_id is NaN, pivot_table will return an empty DataFrame.
+    # Therefore, use a sensible default if direction id is not known.
+    # Some gtfs feeds only contain direction_id 0, use that as default
+    stop_times['direction_id'] = stop_times['direction_id'].fillna(0)
 
     # ------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------
@@ -703,6 +710,13 @@ def speeds_from_gtfs(routes, stop_times, segments_gdf, cutoffs = [0,6,9,15,19,22
         stop_times['runtime_h'] = first_try['runtime_h']
     
     stop_times.head(2)
+
+    # direction_id is optional, as it is not needed to determine speeds
+    # However, if direction_id is NaN, pivot_table will return an empty DataFrame.
+    # Therefore, use a sensible default if direction id is not known.
+    # Some gtfs feeds only contain direction_id 0, use that as default
+    stop_times['direction_id'] = stop_times['direction_id'].fillna(0)
+
     # Merge stop_times with segments_gdf to get the distance
     segments_gdf['direction_id'] = segments_gdf['direction_id'].map(int)
     segments_gdf['stop_sequence'] = segments_gdf['stop_sequence'].map(int)
@@ -1137,7 +1151,12 @@ def stops_freq(stop_times, stops, cutoffs = [0,6,9,15,19,22,24]):
     stop_times['window'] = stop_times['window'].astype(str)
     stop_times['hour'] = pd.cut(stop_times['departure_time'], bins=hours, right=False, labels=hours_labels)
     stop_times['hour'] = stop_times['hour'].astype(str)
-  
+
+    # direction_id is optional, as it is not needed to determine trip frequencies
+    # However, if direction_id is NaN, pivot_table will return an empty DataFrame.
+    # Therefore, use a sensible default if direction id is not known.
+    # Some gtfs feeds only contain direction_id 0, use that as default
+    stop_times['direction_id'] = stop_times['direction_id'].fillna(0)
     trips_per_window = stop_times.pivot_table('trip_id', index=['stop_id', 'direction_id','window'], aggfunc='count').reset_index()
     trips_per_hour = stop_times.pivot_table('trip_id', index=['stop_id', 'direction_id','hour'], aggfunc='count').reset_index()
   
@@ -1157,6 +1176,7 @@ def stops_freq(stop_times, stops, cutoffs = [0,6,9,15,19,22,24]):
     stop_frequencies = pd.merge(stop_frequencies, stops.loc[:, ['stop_id', 'stop_name', 'geometry']], how='left')
     stop_frequencies = gpd.GeoDataFrame(data=stop_frequencies.drop('geometry', axis=1), geometry=stop_frequencies.geometry)
     
+    # This is a bit suspect, since some gtfs feeds seem to only use direction_id 0
     stop_frequencies.loc[stop_frequencies.direction_id == 0, 'direction_id'] = 'Inbound'
     stop_frequencies.loc[stop_frequencies.direction_id == 1, 'direction_id'] = 'Outbound'
     
@@ -1328,6 +1348,11 @@ def lines_freq(stop_times, trips, shapes, routes, cutoffs = [0,6,9,15,19,22,24])
     
     stop_times_first = stop_times.loc[stop_times.stop_sequence==1,:]
     
+    # direction_id is optional, as it is not needed to determine line frequencies
+    # However, if direction_id is NaN, pivot_table will return an empty DataFrame.
+    # Therefore, use a sensible default if direction id is not known.
+    # Some gtfs feeds only contain direction_id 0, use that as default
+    stop_times['direction_id'] = stop_times['direction_id'].fillna(0)
     # Count number of trips per windows and hour
     trips_per_window = stop_times_first.pivot_table('trip_id', index=['route_id','direction_id','window'], aggfunc='count').reset_index()
     trips_per_hour = stop_times_first.pivot_table('trip_id', index=['route_id', 'direction_id','hour'], aggfunc='count').reset_index()
@@ -1450,6 +1475,11 @@ def segments_freq(segments_gdf, stop_times, routes, cutoffs = [0,6,9,15,19,22,24
 
     # Count number of trips per windows and hour
 
+    # direction_id is optional, as it is not needed to determine segment frequencies
+    # However, if direction_id is NaN, pivot_table will return an empty DataFrame.
+    # Therefore, use a sensible default if direction id is not known.
+    # Some gtfs feeds only contain direction_id 0, use that as default
+    stop_times['direction_id'] = stop_times['direction_id'].fillna(0)
     trips_per_window = stop_times.pivot_table('trip_id', index=['route_id','stop_id', 'direction_id','window'], aggfunc='count').reset_index()
     trips_per_hour = stop_times.pivot_table('trip_id', index=['route_id','stop_id', 'direction_id','hour'], aggfunc='count').reset_index()
 
