@@ -29,7 +29,7 @@ import gtfs_functions as gtfs
 
 # GTFS Import <a class="anchor" id="gtfs_parsing"></a>
 
-The function `import_gtfs` takes the path or the zip file as argument and returns 5 dataframes/geodataframes.
+The function `import_gtfs` is a wrapper around `partridge`. It takes the path or the zip file as argument and returns 5 dataframes/geodataframes.
 
 
 ```python
