@@ -297,9 +297,15 @@ class Feed:
 
 
     def get_trips(self):
-        trips = extract_file('trips', self)
         routes = self.routes
 
+        trips = extract_file('trips', self)
+        trips['trip_id'] = trips.trip_id.astype(str)
+        trips['route_id'] = trips.route_id.astype(str)
+
+        if 'shape_id' in trips.columns:
+            trips['shape_id'] = trips.shape_id.astype(str)
+        
         # Get routes info in trips
         # The GTFS feed might be missing some of the keys, e.g. direction_id or shape_id.
         # To allow processing incomplete GTFS data, we must reindex instead:
@@ -312,11 +318,6 @@ class Feed:
         # If we were asked to only fetch the busiest date
         if self.busiest_date:
             trips = trips[trips.service_id==self.busiest_service_id]
-
-        trips['trip_id'] = trips.trip_id.astype(str)
-
-        if 'shape_id' in trips.columns:
-            trips['shape_id'] = trips.shape_id.astype(str)
 
         return trips
 
@@ -352,8 +353,6 @@ class Feed:
 
 
     def get_stop_times(self):
-        # Get trips, routes and stops info in stop_times
-        stop_times = extract_file('stop_times', self)
         if self._trips is not None: # prevents infinite loop
             logging.info('_trips is defined in stop_times')
             trips = self._trips
@@ -362,6 +361,9 @@ class Feed:
             trips = self.trips
         stops = self.stops
 
+        # Get trips, routes and stops info in stop_times
+        stop_times = extract_file('stop_times', self)
+        
         # Fix data types
         stop_times['trip_id'] = stop_times.trip_id.astype(str)
         stop_times['stop_id'] = stop_times.stop_id.astype(str)
