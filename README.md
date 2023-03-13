@@ -1,7 +1,7 @@
 # GTFS functions
 
 Update March 2023:
-* Removed dependency with [partridge](https://github.com/remix/partridge). 
+* Removed dependency with [partridge](https://github.com/remix/partridge). As much as we love this package and think it is absolutely great, removing a dependency gives us more control and keeps this package from failing whenever something changes in `partridge`.
 * We treat the GTFS as a class, where each file is a property. See examples below to find out how to work with it. We hope this simplifies your code.
 * Fixed and enhanced **segment cutting**. 
 * Support to identify route patterns!! Check it out using `feed.routes_patterns`.
@@ -36,9 +36,7 @@ from gtfs_functions import Feed, map_gdf
 ```
 
 # GTFS Import <a class="anchor" id="gtfs_parsing"></a>
-
-The function `import_gtfs` takes the path or the zip file as argument and returns 5 dataframes/geodataframes.
-
+Now you can interact with your GTFS with the class `Feed`. Take a look at the class with `?Feed` to check what arguments you can specify. 
 
 ```python
 gtfs_path = 'data/sfmta.zip'
