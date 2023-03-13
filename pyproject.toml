@@ -18,12 +18,12 @@ classifiers = [
 ]
 
 dependencies = [
-    'pandas', 'geopandas',
-    'shapely', 'utm', 'numpy',
-    'pendulum',
-    'branca',
-    'plotly', 'jenkspy', 'folium',
-    'unicode'
+    "pandas>=1.5.3", "geopandas>=0.12.2",
+    "shapely>=2.0.1", "utm>=0.7.0", "numpy>=1.24.2",
+    "pendulum>=2.0.0",
+    "branca>=0.6.0",
+    "plotly>=5.13.0", "jenkspy>=0.3.2", "folium>=0.14.0",
+    "unicode>=2.9"
 ]
 
 [project.urls]
