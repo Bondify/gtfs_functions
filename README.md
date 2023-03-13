@@ -31,12 +31,12 @@ conda create -n new-env python=3.10
 
 ## Installation <a class="anchor" id="installation"></a>
 
-
+You can install the package running the following in your console:
 ```console
 pip install gtfs_functions==2.0.0
 ```
 
-
+Import the package in your script/notebook
 ```python
 from gtfs_functions import Feed, map_gdf
 ```
