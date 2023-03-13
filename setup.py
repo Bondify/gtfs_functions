@@ -20,8 +20,11 @@ setuptools.setup(
     ],
     python_requires='>=3.10',
     install_requires=[
-        'pandas', 'partridge', 'geopandas',
-        'utm', 'shapely', 'math', 'branca',
-        'plotly', 'jenkspy', 'foulium'
+        'pandas', 'geopandas',
+        'shapely', 'utm', 'numpy',
+        'pendulum',
+        'branca',
+        'plotly', 'jenkspy', 'folium',
+        'unicode'
     ],
 )
