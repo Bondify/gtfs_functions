@@ -4,18 +4,22 @@ import os
 import plotly.express as px
 import jenkspy
 import folium
+import logging
 
 import warnings
 warnings.filterwarnings("ignore")
 
 
 def map_gdf(
-        gdf, variable,
+        gdf,
+        variable='min_per_trip',
         colors=["#d13870", "#e895b3" , '#55d992', '#3ab071', '#0e8955', '#066a40'],
-        tooltip_var=[],
-        tooltip_labels=[],
-        breaks=[]):
+        tooltip_var=['min_per_trip'],
+        tooltip_labels=['Headway: '],
+        breaks=[]
+        ):
 
+    gdf.reset_index(inplace=True, drop=True)
     # Look for the center of the map
     minx, miny, maxx, maxy = gdf.geometry.total_bounds
 
@@ -29,7 +33,7 @@ def map_gdf(
 
     # Calculate the breaks if they were not specified
     if (breaks == []) & (not categorical):
-        breaks = jenkspy.jenks_breaks(gdf[variable], nb_class=len(colors))
+        breaks = jenkspy.jenks_breaks(gdf[variable], n_classes=len(colors))
         breaks = [int(b) for b in breaks]
 
     m = folium.Map(location=[centroid_lat, centroid_lon],
@@ -39,10 +43,6 @@ def map_gdf(
     # If the variable is categorical
     if categorical:
         gdf['radius'] = 5
-        # qualitative_palette = [
-        #   blue, red, green,
-        #   yellow, purple, aqua,
-        #   pink, peach,melon]
 
         # We start with Remix Lightrail colors
         # and then add default colors from Plotly
@@ -65,9 +65,10 @@ def map_gdf(
         gdf = pd.merge(
             gdf, fill_color,
             left_on=variable, right_on=variable, how='left')
+    
     # If the variable is numerical
     else:
-        gdf['radius'] = gdf[variable]
+        gdf['radius'] = gdf[variable] / gdf[variable].max() * 10
         index = [int(b) for b in breaks]
         colorscale = branca.colormap.StepColormap(
             colors, index=index, caption=variable)
@@ -80,7 +81,7 @@ def map_gdf(
             folium.CircleMarker(
                 location=[gdf.loc[i, 'geometry'].y, gdf.loc[i, 'geometry'].x],
                 radius=float(gdf.loc[i, 'radius']),
-                tooltip=tooltip_labels[0] + str(gdf.loc[i, tooltip_var[0]]),
+                tooltip=tooltip_labels[0] + str(gdf.loc[i, tooltip_var[0]]) + ' min',
                 color='#ffffff00',
                 fill=True,
                 fill_opacity=.7,
