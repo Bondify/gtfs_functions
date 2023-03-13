@@ -23,6 +23,12 @@ Make sure `stop_times.txt` has no `Null` values in the columns `arrival_time` an
 * [Mapping the results](#map_gdf)
 * [Other plots](#plotly)
 
+## Python version
+The package requires `python>=3.10`. You can create a new environment with this version using conda:
+```console
+conda create -n new-env python=3.10
+```
+
 ## Installation <a class="anchor" id="installation"></a>
 
 
