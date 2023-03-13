@@ -1,13 +1,13 @@
 # GTFS functions
 
-Update March 2023:
+This package allows you to create various layers directly from the GTFS and visualize the results in the most straightforward way possible.
+
+## Update March 2023:
 * Removed dependency with [partridge](https://github.com/remix/partridge). As much as we love this package and think it is absolutely great, removing a dependency gives us more control and keeps this package from failing whenever something changes in `partridge`.
 * We treat the GTFS as a class, where each file is a property. See examples below to find out how to work with it. We hope this simplifies your code.
-* Fixed and enhanced **segment cutting**. 
-* Support to identify route patterns!! Check it out using `feed.routes_patterns`.
+* Fixed and enhanced **segment cutting**. Shout out to [Mattijs De Paepe](https://github.com/mattijsdp)
+* Support to identify route patterns!! Check it out using `feed.routes_patterns`. Shout out to [Tobias Bartsch](https://github.com/tobiasbartsch)
 * The rest should stay the same.
-
-This package allows you to create various layers directly from the GTFS and visualize the results in the most straightforward way possible.
 
 #### Warning! 
 Make sure `stop_times.txt` has no `Null` values in the columns `arrival_time` and `departure_time`. If this is not the case, some functions on this package might fail.
