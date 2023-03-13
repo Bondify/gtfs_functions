@@ -4,6 +4,7 @@ Update March 2023:
 * Removed dependency with [partridge](https://github.com/remix/partridge). 
 * We treat the GTFS as a class, where each file is a property. See examples below to find out how to work with it. We hope this simplifies your code.
 * Fixed and enhanced **segment cutting**. 
+* Support to identify route patterns!! Check it out using `feed.routes_patterns`.
 * The rest should stay the same.
 
 This package allows you to create various layers directly from the GTFS and visualize the results in the most straightforward way possible.
