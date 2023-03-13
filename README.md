@@ -32,8 +32,8 @@ conda create -n new-env python=3.10
 ## Installation <a class="anchor" id="installation"></a>
 
 
-```python
-!pip install gtfs_functions
+```console
+pip install gtfs_functions==2.0.0
 ```
 
 
