@@ -1,8 +1,0 @@
-README.md
-setup.py
-gtfs_functions/__init__.py
-gtfs_functions/gtfs_funtions.py
-gtfs_functions.egg-info/PKG-INFO
-gtfs_functions.egg-info/SOURCES.txt
-gtfs_functions.egg-info/dependency_links.txt
-gtfs_functions.egg-info/top_level.txt
