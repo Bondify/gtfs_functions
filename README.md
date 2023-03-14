@@ -33,7 +33,7 @@ conda create -n new-env python=3.8
 
 You can install the package running the following in your console:
 ```console
-pip install gtfs_functions==2.0.0
+pip install gtfs_functions==2.0.3
 ```
 
 Import the package in your script/notebook
