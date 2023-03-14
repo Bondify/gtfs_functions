@@ -51,7 +51,7 @@ gtfs_path = 'data/sfmta.zip'
 # It also works with URL's
 gtfs_path = 'https://transitfeeds.com/p/sfmta/60/latest/download'
 
-feed = Feed(gtfs_path, time_windows=[0, 6, 10, 12, 16, 19, 24)
+feed = Feed(gtfs_path, time_windows=[0, 6, 10, 12, 16, 19, 24])
 ```
 
 
