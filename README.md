@@ -51,7 +51,7 @@ gtfs_path = 'data/sfmta.zip'
 # It also works with URL's
 gtfs_path = 'https://transitfeeds.com/p/sfmta/60/latest/download'
 
-feed = Feed(gtfs_path)
+feed = Feed(gtfs_path, time_windows=[0, 6, 10, 12, 16, 19, 24)
 ```
 
 
@@ -327,9 +327,9 @@ Returns a geodataframe with the frequency for each combination of `stop`, `time 
 
 
 ```python
-cutoffs = [0,6,9,15.5,19,22,24]
+time_windows = [0, 6, 9, 15.5, 19, 22, 24]
 
-feed = Feed(gtfs_path, cutoffs=cutoffs)
+feed = Feed(gtfs_path, time_windows=time_windows)
 stop_freq = feed.stops_freq
 stop_freq.head(2)
 ```
@@ -414,8 +414,7 @@ Returns a geodataframe with the frequency for each combination of `line`, `time 
 
 
 ```python
-cutoffs = [0,6,9,15.5,19,22,24]
-line_freq = gtfs.lines_freq(stop_times, trips, shapes, routes, cutoffs = cutoffs)
+line_freq = feed.lines_freq
 line_freq.head()
 ```
 
@@ -706,7 +705,7 @@ gtfs.map_gdf(gdf = gdf,
 ## Line frequencies
 ```python
 # Line frequencies
-condition_dir = line_freq.dir_id == 'Inbound'
+condition_dir = line_freq.direction_id == 'Inbound'
 condition_window = line_freq.window == '6:00-9:00'
 
 gdf = line_freq.loc[(condition_dir & condition_window),:].reset_index()
