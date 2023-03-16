@@ -5,7 +5,7 @@ import os
 import logging
 import geopandas as gpd
 import logging
-import requests, zipfile, io
+import requests, io
 import pendulum
 import hashlib
 from shapely.geometry import LineString, MultiPoint
@@ -233,11 +233,12 @@ class Feed:
         Compute the different patterns of each route.
         returns (trips_patterns, routes_patterns)
         """
+        stop_times = self.stop_times
         logging.info('computing patterns')
-        trip_stops = trips.merge(
-            self.stop_times, how='left', on='trip_id')
+        trip_stops = stop_times.copy()
+
         trip_stops = trip_stops[
-            ['route_id_x', 'direction_id_x', 'shape_id_x',
+            ['route_id', 'direction_id', 'shape_id',
              'trip_id', 'stop_id', 'stop_sequence']]
         trip_stops['zipped_stops'] = list(
             zip(trip_stops.stop_id, trip_stops.stop_sequence))
