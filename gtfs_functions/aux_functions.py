@@ -3,6 +3,7 @@ import math
 import utm
 import geopandas as gpd
 import logging
+import numpy as np
 
 
 def add_runtime(st):
@@ -347,14 +348,26 @@ def add_frequency(
 def add_route_name(data, routes):
     # Add the route name
     routes['route_name'] = ''
-    if routes.route_short_name.isnull().unique()[0]:
+
+    def check_null(col):
+        # Check for null values
+        check = (
+            routes[col].isnull().unique()[0] |
+            (routes[col] == np.nan).unique()[0] |
+            (routes[col] == 'nan').unique()[0]
+        )
+
+        return check
+
+    if check_null('route_short_name'):
         routes['route_name'] = routes.route_long_name
-    elif routes.route_long_name.isnull().unique()[0]:
+    elif check_null('route_long_name'):
         routes['route_name'] = routes.route_short_name
     else:
         routes['route_name'] =\
             routes.route_short_name.astype(str)\
                 + ' ' + routes.route_long_name.astype(str)
+
 
     data = pd.merge(
         data, routes[['route_id', 'route_name']],
