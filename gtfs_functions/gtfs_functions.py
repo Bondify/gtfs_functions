@@ -11,6 +11,7 @@ import hashlib
 from shapely.geometry import LineString, MultiPoint
 from gtfs_functions.aux_functions import *
 
+
 logging.basicConfig(level=logging.INFO)
 
 
@@ -407,6 +408,7 @@ class Feed:
         if self.geo:
             aux = extract_file('shapes', self)
             shapes = aux[["shape_id", "shape_pt_lat", "shape_pt_lon"]]\
+                .sort_values(['shape_id','shape_pt_sequence'])\
                 .groupby("shape_id")\
                     .agg(list)\
                         .apply(lambda x: LineString(zip(x[1], x[0])), axis=1)
@@ -768,4 +770,4 @@ def extract_file(file, feed):
                 os.rmdir('tmp')
                 return data
         else:
-            return logging.info(f'File "{file}.txt" not found.')  
+            return logging.info(f'File "{file}.txt" not found.')
