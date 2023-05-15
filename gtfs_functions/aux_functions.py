@@ -212,7 +212,7 @@ def add_all_lines(
         .astype(int)
 
     # Append data for all lines to the input df
-    data_complete = line_frequencies.append(data_all_lines).reset_index()
+    data_complete = pd.concat([line_frequencies, data_all_lines]).reset_index(drop=True)
 
     return data_complete
 
