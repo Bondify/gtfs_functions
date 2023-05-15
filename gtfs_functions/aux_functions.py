@@ -132,7 +132,7 @@ def add_all_lines_speed(data, speeds, segments_gdf):
     data_all_lines = get_all_lines_speed(speeds, segments_gdf)
 
     # Add it to the data we already had
-    data_complete = data.append(data_all_lines)
+    data_complete = pd.concat([data, data_all_lines])
 
     # Clean data
     data_complete = data_complete[
