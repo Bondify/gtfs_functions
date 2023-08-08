@@ -9,6 +9,7 @@ import numpy as np
 def add_runtime(st):
     # Get the runtime between stops
     logging.info('adding runtime')
+    st.sort_values(by=['trip_id', 'stop_sequence'], inplace=True, ascending=True)
     c = st.trip_id == st.trip_id.shift(-1)
     st.loc[c, 'runtime_sec'] = st.arrival_time.shift(-1)[c] - st.arrival_time[c]
     st['end_stop_id'] = st.stop_id.shift(-1)
@@ -368,7 +369,6 @@ def add_route_name(data, routes):
             routes.route_short_name.astype(str)\
                 + ' ' + routes.route_long_name.astype(str)
 
-
     data = pd.merge(
         data, routes[['route_id', 'route_name']],
         left_on='route_id', right_on='route_id', how='left')
@@ -390,3 +390,13 @@ def code(gdf):
         epsg_code = 32600 + zone[2]
         
     return epsg_code
+
+
+def num_to_letters(num):
+    result = ""
+    while num > 0:
+        num -= 1
+        digit = num % 26
+        result = chr(digit + 65) + result
+        num //= 26
+    return result

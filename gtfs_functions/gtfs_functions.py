@@ -6,10 +6,15 @@ import logging
 import geopandas as gpd
 import logging
 import requests, io
-import pendulum
+import pendulum as pl
 import hashlib
 from shapely.geometry import LineString, MultiPoint
 from gtfs_functions.aux_functions import *
+import sys
+
+if not sys.warnoptions:
+    import warnings
+    warnings.simplefilter("ignore")
 
 logging.basicConfig(level=logging.INFO)
 
@@ -21,7 +26,8 @@ class Feed:
             time_windows: list = [0, 6, 9, 15, 19, 22, 24],
             busiest_date: bool = True,
             geo: bool = True,
-            patterns: bool = True
+            patterns: bool = True,
+            dates: list = []
             ):
 
         self._gtfs_path = gtfs_path
@@ -29,9 +35,11 @@ class Feed:
         self._busiest_date = busiest_date
         self._geo = geo
         self._patterns = patterns
+        self._dates = dates
         self._routes_patterns = None
         self._trips_patterns = None
         self._files = None
+        self._bbox = None
         self._busiest_service_id = None
         self._agency = None
         self._calendar = None
@@ -47,8 +55,8 @@ class Feed:
         self._segments_freq = None
         self._speeds = None
         self._avg_speeds = None
-        
-    
+        self._dates_service_id = None
+
     @property
     def gtfs_path(self):
         return self._gtfs_path
@@ -71,6 +79,16 @@ class Feed:
             self._files = self.get_files()
     
         return self._files
+
+    @property
+    def bbox(self):
+        if self._bbox is None:
+            self._bbox = self.get_bbox()
+        return self._bbox
+
+    @property
+    def dates(self):
+        return self._dates
 
     @property
     def routes_patterns(self):
@@ -214,6 +232,31 @@ class Feed:
 
         return self._avg_speeds
     
+    @property
+    def dates_service_id(self):
+        if self._dates_service_id is None:
+            self._dates_service_id = self.get_dates_service_id()
+        return self._dates_service_id
+    
+    @trips.setter
+    def trips(self, value):
+        self._trips = value
+
+    @stop_times.setter
+    def stop_times(self, value):
+        self._stop_times = value
+
+    @stops.setter
+    def stops(self, value):
+        self._stops = value
+
+    @routes.setter
+    def routes(self, value):
+        self._routes = value
+
+    @dates_service_id.setter
+    def dates_service_id(self, value):
+        self._dates_service_id = value
 
     def get_files(self):
         try:
@@ -227,7 +270,31 @@ class Feed:
             with ZipFile(io.BytesIO(r.content)) as myzip:
                 return myzip.namelist()
 
-    
+    def get_bbox(self):
+        logging.info('Getting the bounding box.')
+        stops = extract_file('stops', self)
+
+        max_x = stops.stop_lon.max()
+        min_x = stops.stop_lon.min()
+        max_y = stops.stop_lat.max()
+        min_y = stops.stop_lat.min()
+
+        geo = {
+            'type': 'Polygon',
+            'coordinates': [
+                [
+                    [max_x, max_y],
+                    [max_x, min_y],
+                    [min_x, min_y],
+                    [min_x, max_y],
+                    [max_x, max_y]
+                ]
+            ]
+        }
+
+        return geo
+
+
     def get_routes_patterns(self, trips):
         """
         Compute the different patterns of each route.
@@ -235,42 +302,61 @@ class Feed:
         """
         stop_times = self.stop_times
         logging.info('computing patterns')
-        trip_stops = stop_times.copy()
-
-        trip_stops = trip_stops[
-            ['route_id', 'direction_id', 'shape_id',
+        trip_stops = stop_times[
+            ['route_id', 'route_name', 'direction_id', 'shape_id',
              'trip_id', 'stop_id', 'stop_sequence']]
         trip_stops['zipped_stops'] = list(
             zip(trip_stops.stop_id, trip_stops.stop_sequence))
 
-        trip_stops_zipped = trip_stops.groupby(
-            ['trip_id'])['zipped_stops'].apply(list)
+        trip_stops_zipped = trip_stops.pivot_table(
+            'zipped_stops',
+            index=['trip_id', 'route_id', 'route_name', 'direction_id', 'shape_id'],
+            aggfunc=list
+        ).reset_index()
         
-        def sort_stops(x):
-            return sorted(x, key=lambda x: x[1])
-
-        trip_stops_zipped_sorted = trip_stops_zipped.apply(sort_stops)
-        trip_stops_zipped_sorted = trip_stops_zipped.apply(str)
-        # trip_stops_zipped_sorted = trip_stops_zipped.apply(str)
-        trips_with_stops = trips.merge(
-            trip_stops_zipped_sorted, on='trip_id')
+        trips_with_stops = trips.merge(trip_stops_zipped)
 
         def version_hash(x):
             hash = hashlib.sha1(f"{x.route_id}{x.direction_id}{str(x.zipped_stops)}".encode("UTF-8")).hexdigest()
             return hash[:18]
-        trips_with_stops['pattern'] = trips_with_stops.apply(
+
+        trips_with_stops['pattern_id'] = trips_with_stops.apply(
             version_hash, axis=1)
 
-        trips_with_patterns = trips_with_stops[[
-            'trip_id', 'route_id', 'pattern', 'route_name',
-            'service_id', 'direction_id', 'shape_id']]
+        # Count number of trips per pattern to identify the main one
+        route_patterns = trips_with_stops.pivot_table(
+            'trip_id',
+            index=[
+                'route_id', 'route_name', 'pattern_id', 'direction_id',
+                'shape_id', trips_with_stops.zipped_stops.astype(str)
+            ], aggfunc='count').reset_index()
 
+        route_patterns = route_patterns\
+            .rename({'trip_id': 'cnt_trips'}, axis=1)\
+                .sort_values(
+                    by=['route_name', 'direction_id', 'cnt_trips'],
+                    ascending=[True, True, False]
+                ).reset_index(drop=True)
         
-        route_patterns = trips_with_stops.groupby(
-            ['route_id', 'pattern', 'direction_id',
-             'shape_id', 'zipped_stops']).count()[['trip_id']]
-        route_patterns = route_patterns.rename(
-            {'trip_id': 'cnt_trips'}, axis=1).reset_index()
+        # Add simple names to patterns: A, B, C, etc.
+        n_patterns = route_patterns.pivot_table('cnt_trips', index=['route_name', 'direction_id'], aggfunc='count').reset_index()
+        n_patterns['route_pattern'] = n_patterns.cnt_trips.apply(lambda row: tuple(np.arange(1, row+1)))
+        n_patterns = n_patterns.explode('route_pattern').reset_index(drop=True)
+        n_patterns['route_pattern'] = n_patterns.route_pattern.apply(num_to_letters)
+        n_patterns['pattern_name'] = n_patterns.route_name + ' - ' + n_patterns.direction_id.astype(int).astype(str) + ' - ' + n_patterns.route_pattern
+        n_patterns.sort_values(by=['route_name', 'direction_id', 'route_pattern'], inplace=True)
+
+        route_patterns = route_patterns.merge(
+            n_patterns[['route_pattern', 'pattern_name']],
+            right_index=True, left_index=True, how='left')
+        
+        # Bring the pattern names to trips
+        trips_with_stops = trips_with_stops.merge(
+            route_patterns[['pattern_id', 'route_pattern', 'pattern_name']],
+            how='left')
+        trips_with_patterns = trips_with_stops[[
+            'trip_id', 'route_id', 'pattern_id', 'route_pattern', 'pattern_name','route_name',
+            'service_id', 'direction_id', 'shape_id']]
 
         return trips_with_patterns.copy(), route_patterns.copy()
 
@@ -285,6 +371,11 @@ class Feed:
                 .sort_values(by='trip_id', ascending=False).index[0]
 
 
+    def get_dates_service_id(self):
+        dates_service_id = self.parse_calendar()
+        return dates_service_id.groupby('date').service_id.apply(list)
+
+
     def get_agency(self):
         return extract_file('agency', self)
 
@@ -297,8 +388,95 @@ class Feed:
         return extract_file('calendar_dates', self)
 
 
+    def parse_calendar(self):
+        calendar = self.calendar
+        calendar_dates = self.calendar_dates
+        busiest_date = self.busiest_date
+
+        # Parse dates
+        calendar['start_date_dt'] = calendar.start_date.astype(str).apply(pl.parse)
+        calendar['end_date_dt'] = calendar.end_date.astype(str).apply(pl.parse) 
+
+        # Get all dates for a given service_id
+        calendar['all_dates'] = calendar.apply(
+            lambda x: np.array([
+                d for d in pl.period(x.start_date_dt, x.end_date_dt).range('days')
+                ]), axis=1
+            )
+        
+        # Boolean variables for day types
+        cols = [
+            'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
+            'saturday', 'sunday']
+        
+        vf = np.vectorize(bool)
+        calendar[cols] = vf(calendar[cols].values)
+
+        # Hash weekdays to make it faster
+        def get_hash_weekdays(row):
+            return {
+                i: v
+                for i, v in enumerate(row[cols].values[0])
+            }
+
+        hash_weekdays = calendar.groupby('service_id').apply(get_hash_weekdays)
+
+        # Filter dates depending on the days of the week
+        calendar['filtered_dates'] = calendar.apply(lambda row: row.all_dates[
+            [
+                hash_weekdays[row.service_id][d.weekday()]
+                for d in row.all_dates
+            ]], axis=1)
+        
+        # Explode filtered_dates
+        t = calendar[['service_id', 'filtered_dates']].explode('filtered_dates')
+        t['filtered_dates'] = t.filtered_dates.dt.date.astype(str)
+
+        t = t.groupby('filtered_dates').service_id.apply(list)
+
+        # Create dictionary with dates as keys and service_id as items
+        date_hash = t.apply(lambda x: dict(zip(x, [True] * len(x)))).to_dict()
+        
+        # --- Do the same for calendar_dates ---
+        calendar_dates['date_str'] = calendar_dates.date.astype(str).apply(pl.parse)\
+            .dt.date.astype(str)
+        
+        cdates_hash = calendar_dates[calendar_dates.exception_type==1].groupby('date_str')\
+            .service_id.apply(list)\
+            .apply(lambda x: dict(zip(x, [True] * len(x)))).to_dict()
+        
+        
+        # Were dates provided or we're looking for the busiest_date?
+        if busiest_date:
+            # We need to look for the busiest date.
+            # To do enable that we need to return the complete
+            # list of dates to `get_trips()`
+            # Get max date and min date
+            dates = list(date_hash.keys()) + list(cdates_hash.keys())
+        else:
+            dates = self.dates
+
+            # Check if the dates have service in the calendars
+            remove_dates = []
+            for i, d in enumerate(dates):
+                if (d not in date_hash) & (d not in cdates_hash):
+                    print(f'The date "{d}" does not have service in this feed and will be removed from the analysis.')
+                    remove_dates.append(d)
+
+            for d in remove_dates:
+                dates.remove(d)
+
+        # Create dataframe with the service_id that applies to each date        
+        aux = pd.concat([pd.DataFrame(date_hash), pd.DataFrame(cdates_hash)]).T.reset_index()
+        dates_service_id = pd.melt(aux, id_vars='index', value_vars=aux.columns)
+        dates_service_id.columns=['date', 'service_id', 'keep']
+        
+        return dates_service_id[~dates_service_id.keep.isnull()]
+
+
     def get_trips(self):
         routes = self.routes
+        dates = self.dates
 
         trips = extract_file('trips', self)
         trips['trip_id'] = trips.trip_id.astype(str)
@@ -306,7 +484,59 @@ class Feed:
 
         if 'shape_id' in trips.columns:
             trips['shape_id'] = trips.shape_id.astype(str)
-        
+
+        # If we were asked to only fetch the busiest date
+        # if self.busiest_date:
+            # trips = trips[trips.service_id==self.busiest_service_id]
+
+        # If we're looking for the busiest date or a specific list of
+        # dates we need to parse de calendar
+        if (self.busiest_date) | (dates!=[]):
+            """
+            In the case we have three possibilites:
+            1. busiest_date=True & dates==[]: in this case the user looks for the 
+                busiest date in the entire feed
+            2. busiest_date=True & dates!=[]: in this case the user looks for the
+                busiest date within the date range provided.
+            3. busiest_daet=False & dates!=[]: in this case the user looks for the
+                entire feed within the date range provided and we don't need to change
+                the "dates" variable at all.
+            """
+            dates_service_id = self.parse_calendar()
+
+            # If busiest_date=True, we have to count the number of trips
+            if self.busiest_date:
+                # Trip per date
+                date_ntrips = trips.merge(dates_service_id).groupby(['date']).\
+                        trip_id.count().sort_values(ascending=False)
+                
+            # If we are looking for the busiest date within our date period,
+            # we only keep the dates in that period of time.
+            if (self.busiest_date) & (dates!=[]):
+                dates_service_id = dates_service_id[dates_service_id.date.isin(dates)]
+                date_ntrips = date_ntrips[date_ntrips.index.isin(dates)]
+            
+            # Now that we've considered both cases we can just filter 
+            # with the busiest_date of the "dates" that made it this far
+            if self.busiest_date:
+                # In that case, if "dates" is empty we need to find the busiest date
+                busiest_date = list(date_ntrips[date_ntrips==date_ntrips.max()].index)
+                max_trips = date_ntrips[date_ntrips==date_ntrips.max()].values[0]
+
+                logging.info(f'The busiest date/s of this feed or your selected date range is/are:  {busiest_date} with {max_trips} trips.')
+                logging.info('In that more than one busiest date was found, the first one will be considered.')
+                logging.info(f'In this case is {busiest_date[0]}.')
+
+                # We need "dates" to be a list
+                dates = busiest_date[:1]
+            
+            # Keep only the trips that are relevant to the use case
+            trips = trips.set_index('service_id').join(
+                dates_service_id[dates_service_id.date.isin(dates)]\
+                    .set_index('service_id'),
+                how='inner'
+            ).reset_index(names='service_id').drop(['keep', 'date'], axis=1).drop_duplicates()
+
         # Get routes info in trips
         # The GTFS feed might be missing some of the keys, e.g. direction_id or shape_id.
         # To allow processing incomplete GTFS data, we must reindex instead:
@@ -315,10 +545,8 @@ class Feed:
         cols = ['trip_id', 'route_id', 'route_name', 'service_id', 'direction_id', 'shape_id']
         trips = add_route_name(trips, routes).reindex(columns=cols)
         
-        # trips = trips[cols]    
-        # If we were asked to only fetch the busiest date
-        if self.busiest_date:
-            trips = trips[trips.service_id==self.busiest_service_id]
+        # Fill null values
+        trips['direction_id'] = trips.direction_id.fillna(0)
 
         return trips
 
@@ -354,6 +582,8 @@ class Feed:
 
 
     def get_stop_times(self):
+        # Get trips, routes and stops info in stop_times
+        stop_times = extract_file('stop_times', self)
         if self._trips is not None: # prevents infinite loop
             logging.info('_trips is defined in stop_times')
             trips = self._trips
@@ -362,9 +592,6 @@ class Feed:
             trips = self.trips
         stops = self.stops
 
-        # Get trips, routes and stops info in stop_times
-        stop_times = extract_file('stop_times', self)
-        
         # Fix data types
         stop_times['trip_id'] = stop_times.trip_id.astype(str)
         stop_times['stop_id'] = stop_times.stop_id.astype(str)
