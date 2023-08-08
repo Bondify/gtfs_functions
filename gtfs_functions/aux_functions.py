@@ -3,11 +3,13 @@ import math
 import utm
 import geopandas as gpd
 import logging
+import numpy as np
 
 
 def add_runtime(st):
     # Get the runtime between stops
     logging.info('adding runtime')
+    st.sort_values(by=['trip_id', 'stop_sequence'], inplace=True, ascending=True)
     c = st.trip_id == st.trip_id.shift(-1)
     st.loc[c, 'runtime_sec'] = st.arrival_time.shift(-1)[c] - st.arrival_time[c]
     st['end_stop_id'] = st.stop_id.shift(-1)
@@ -131,7 +133,7 @@ def add_all_lines_speed(data, speeds, segments_gdf):
     data_all_lines = get_all_lines_speed(speeds, segments_gdf)
 
     # Add it to the data we already had
-    data_complete = data.append(data_all_lines)
+    data_complete = pd.concat([data, data_all_lines])
 
     # Clean data
     data_complete = data_complete[
@@ -211,7 +213,7 @@ def add_all_lines(
         .astype(int)
 
     # Append data for all lines to the input df
-    data_complete = line_frequencies.append(data_all_lines).reset_index()
+    data_complete = pd.concat([line_frequencies, data_all_lines]).reset_index(drop=True)
 
     return data_complete
 
@@ -347,9 +349,20 @@ def add_frequency(
 def add_route_name(data, routes):
     # Add the route name
     routes['route_name'] = ''
-    if routes.route_short_name.isnull().unique()[0]:
+
+    def check_null(col):
+        # Check for null values
+        check = (
+            routes[col].isnull().unique()[0] |
+            (routes[col] == np.nan).unique()[0] |
+            (routes[col] == 'nan').unique()[0]
+        )
+
+        return check
+
+    if check_null('route_short_name'):
         routes['route_name'] = routes.route_long_name
-    elif routes.route_long_name.isnull().unique()[0]:
+    elif check_null('route_long_name'):
         routes['route_name'] = routes.route_short_name
     else:
         routes['route_name'] =\
@@ -377,3 +390,13 @@ def code(gdf):
         epsg_code = 32600 + zone[2]
         
     return epsg_code
+
+
+def num_to_letters(num):
+    result = ""
+    while num > 0:
+        num -= 1
+        digit = num % 26
+        result = chr(digit + 65) + result
+        num //= 26
+    return result
