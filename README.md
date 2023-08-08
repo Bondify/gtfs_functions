@@ -4,7 +4,7 @@ This package allows you to create various layers directly from the GTFS and visu
 
 ## Update August 2023:
 * Possibility to parse the GTFS for a specific date.
-`feed = Feed(gtfs_path, dates=['2023-03-31, 2023-04-01])`
+`feed = Feed(gtfs_path, dates=['2023-03-31', '2023-04-01'])`
 
 ## Update March 2023:
 * Removed dependency with [partridge](https://github.com/remix/partridge). As much as we love this package and think it is absolutely great, removing a dependency gives us more control and keeps this package from failing whenever something changes in `partridge`.
