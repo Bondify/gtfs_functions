@@ -2,6 +2,10 @@
 
 This package allows you to create various layers directly from the GTFS and visualize the results in the most straightforward way possible.
 
+## Update August 2023:
+* Possibility to parse the GTFS for a specific date.
+`feed = Feed(gtfs_path, dates=['2023-03-31, 2023-04-01])`
+
 ## Update March 2023:
 * Removed dependency with [partridge](https://github.com/remix/partridge). As much as we love this package and think it is absolutely great, removing a dependency gives us more control and keeps this package from failing whenever something changes in `partridge`.
 * We treat the GTFS as a class, where each file is a property. See examples below to find out how to work with it. We hope this simplifies your code.
