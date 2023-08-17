@@ -438,13 +438,16 @@ class Feed:
         date_hash = t.apply(lambda x: dict(zip(x, [True] * len(x)))).to_dict()
         
         # --- Do the same for calendar_dates ---
-        calendar_dates['date_str'] = calendar_dates.date.astype(str).apply(pl.parse)\
-            .dt.date.astype(str)
-        
-        cdates_hash = calendar_dates[calendar_dates.exception_type==1].groupby('date_str')\
-            .service_id.apply(list)\
-            .apply(lambda x: dict(zip(x, [True] * len(x)))).to_dict()
-        
+        if not calendar_dates.empty:
+            calendar_dates['date_str'] = calendar_dates.date.astype(str).apply(pl.parse)\
+                .dt.date.astype(str)
+            
+            cdates_hash = calendar_dates[calendar_dates.exception_type==1].groupby('date_str')\
+                .service_id.apply(list)\
+                .apply(lambda x: dict(zip(x, [True] * len(x)))).to_dict()
+        else:
+            cdates_hash = {}
+            
         
         # Were dates provided or we're looking for the busiest_date?
         if busiest_date:
@@ -980,7 +983,8 @@ def extract_file(file, feed):
                 os.rmdir('tmp')
                 return data
         else:
-            return logging.info(f'File "{file}.txt" not found.')     
+            logging.info(f'File "{file}.txt" not found.')
+            return pd.DataFrame()
     
     # Try as a URL
     except FileNotFoundError as e:
@@ -996,4 +1000,5 @@ def extract_file(file, feed):
                 os.rmdir('tmp')
                 return data
         else:
-            return logging.info(f'File "{file}.txt" not found.')  
+            logging.info(f'File "{file}.txt" not found.')  
+            return pd.DataFrame()
