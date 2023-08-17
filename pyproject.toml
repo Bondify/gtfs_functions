@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "gtfs-functions"
-version = "2.0.5"
+version = "2.0.8"
 authors = [
   { name="Santiago Toso", email="santiagoa.toso@gmail.com" },
 ]
@@ -18,8 +18,11 @@ classifiers = [
 ]
 
 dependencies = [
-    "pandas==1.5.3", "geopandas>=0.12.2",
-    "shapely>=2.0.1", "utm>=0.7.0", "numpy>=1.24.2",
+    "pandas", 
+    "geopandas",
+    "shapely", "utm>=0.7.0", 
+    #"numpy>=1.24.2",
+    'numpy',
     "pendulum>=2.0.0",
     "branca>=0.6.0",
     "plotly>=5.13.0", "jenkspy>=0.3.2", "folium>=0.14.0",
