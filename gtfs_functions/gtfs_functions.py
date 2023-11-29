@@ -976,45 +976,28 @@ def extract_file(file, feed):
         file_path = f"{files[0].split('/')[0]}/{file}.txt"
         mid_folder_path = f"/tmp/{files[0].split('/')[0]}"
 
-    # S3 implementation
-    if gtfs_path.split('://')[0]=='s3':
-        s3 = boto3.resource('s3')
-        bucket = gtfs_path.split('://')[1].split('/')[0]
-        boto_bucket = s3.Bucket(bucket)
-        key = '/'.join(gtfs_path.split('/')[3:])
-        
-        with io.BytesIO() as data:
-            boto_bucket.download_fileobj(key, data)
-            with ZipFile(data) as myzip:
+    try:
+        if file_path in files:
+            with ZipFile(gtfs_path) as myzip:
                 logging.info(f'Reading "{file}.txt".')
                 myzip.extract(file_path, path='/tmp')
                 data = pd.read_csv(f'/tmp/{file_path}', dtype=data_types)
 
                 os.remove(f"/tmp/{file_path}")
                 return data
-    else:
-        try:
-            if file_path in files:
-                with ZipFile(gtfs_path) as myzip:
-                    logging.info(f'Reading "{file}.txt".')
-                    myzip.extract(file_path, path='/tmp')
-                    data = pd.read_csv(f'/tmp/{file_path}', dtype=data_types)
+        else:
+            return logging.info(f'File "{file}.txt" not found.')     
+    
+    # Try as a URL
+    except FileNotFoundError as e:
+        if f'{file}.txt' in files:
+            r = requests.get(gtfs_path)
+            with ZipFile(io.BytesIO(r.content)) as myzip:
+                logging.info(f'Reading "{file}.txt".')
+                myzip.extract(f"{file_path}", path='/tmp')
+                data = pd.read_csv(f'/tmp/{file_path}', dtype=data_types)
 
-                    os.remove(f"/tmp/{file_path}")
-                    return data
-            else:
-                return logging.info(f'File "{file}.txt" not found.')     
-        
-        # Try as a URL
-        except FileNotFoundError as e:
-            if f'{file}.txt' in files:
-                r = requests.get(gtfs_path)
-                with ZipFile(io.BytesIO(r.content)) as myzip:
-                    logging.info(f'Reading "{file}.txt".')
-                    myzip.extract(f"{file_path}", path='/tmp')
-                    data = pd.read_csv(f'/tmp/{file_path}', dtype=data_types)
-
-                    os.remove(f"/tmp/{file_path}")
-                    return data
-            else:
-                return logging.info(f'File "{file}.txt" not found.')  
+                os.remove(f"/tmp/{file_path}")
+                return data
+        else:
+            return logging.info(f'File "{file}.txt" not found.')  
