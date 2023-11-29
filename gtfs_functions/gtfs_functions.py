@@ -10,7 +10,14 @@ import pendulum as pl
 import hashlib
 from shapely.geometry import LineString, MultiPoint
 from gtfs_functions.aux_functions import *
+from itertools import permutations, chain
+from shapely import distance
+from h3 import geo_to_h3, k_ring
+from time import time
+import io
 import sys
+import pendulum as pl
+
 
 if not sys.warnoptions:
     import warnings
@@ -27,7 +34,8 @@ class Feed:
             busiest_date: bool = True,
             geo: bool = True,
             patterns: bool = True,
-            dates: list = []
+            start_date: str = None,
+            end_date: str = None
             ):
 
         self._gtfs_path = gtfs_path
@@ -35,7 +43,9 @@ class Feed:
         self._busiest_date = busiest_date
         self._geo = geo
         self._patterns = patterns
-        self._dates = dates
+        self._start_date = start_date
+        self._end_date = end_date
+        self._dates = None
         self._routes_patterns = None
         self._trips_patterns = None
         self._files = None
@@ -55,6 +65,7 @@ class Feed:
         self._segments_freq = None
         self._speeds = None
         self._avg_speeds = None
+        self._dist_matrix = None
         self._dates_service_id = None
 
     @property
@@ -87,7 +98,17 @@ class Feed:
         return self._bbox
 
     @property
+    def start_date(self):
+        return self._start_date
+    
+    @property
+    def end_date(self):
+        return self._end_date
+
+    @property
     def dates(self):
+        if self._dates is None:
+            self._dates = self.get_dates()
         return self._dates
 
     @property
@@ -233,6 +254,13 @@ class Feed:
         return self._avg_speeds
     
     @property
+    def distance_matrix(self):
+        if self._dist_matrix is None:
+            self._dist_matrix = self.get_distance_between_stops()
+
+        return self._dist_matrix
+    
+    @property
     def dates_service_id(self):
         if self._dates_service_id is None:
             self._dates_service_id = self.get_dates_service_id()
@@ -253,6 +281,10 @@ class Feed:
     @routes.setter
     def routes(self, value):
         self._routes = value
+
+    @shapes.setter
+    def shapes(self, value):
+        self._shapes = value
 
     @dates_service_id.setter
     def dates_service_id(self, value):
@@ -293,6 +325,29 @@ class Feed:
         }
 
         return geo
+
+    def get_dates(self):
+        start_date = self.start_date
+        end_date = self.end_date
+        if start_date is not None:
+            pl_start_date = pl.from_format(start_date, 'YYYY-MM-DD')
+            
+            if  end_date is not None:
+                pl_end_date = pl.from_format(end_date, 'YYYY-MM-DD')
+            
+            
+            elif end_date is None:
+                logging.info('End date is None so we will take today as end date.')
+                
+                pl_end_date = pl.today()
+
+            # Get all dates between start and end date
+            period = pl.period(pl_start_date, pl_end_date)
+
+            return [day.to_date_string() for day in period]
+        else:
+            logging.info('Start date is None. You should either specify a start date or set busiest_date to True.')
+            return []
 
 
     def get_routes_patterns(self, trips):
@@ -436,18 +491,15 @@ class Feed:
 
         # Create dictionary with dates as keys and service_id as items
         date_hash = t.apply(lambda x: dict(zip(x, [True] * len(x)))).to_dict()
-        
+
         # --- Do the same for calendar_dates ---
-        if not calendar_dates.empty:
-            calendar_dates['date_str'] = calendar_dates.date.astype(str).apply(pl.parse)\
-                .dt.date.astype(str)
-            
-            cdates_hash = calendar_dates[calendar_dates.exception_type==1].groupby('date_str')\
-                .service_id.apply(list)\
-                .apply(lambda x: dict(zip(x, [True] * len(x)))).to_dict()
-        else:
-            cdates_hash = {}
-            
+        calendar_dates['date_str'] = calendar_dates.date.astype(str).apply(pl.parse)\
+            .dt.date.astype(str)
+        
+        cdates_hash = calendar_dates[calendar_dates.exception_type==1].groupby('date_str')\
+            .service_id.apply(list)\
+            .apply(lambda x: dict(zip(x, [True] * len(x)))).to_dict()
+
         
         # Were dates provided or we're looking for the busiest_date?
         if busiest_date:
@@ -744,6 +796,7 @@ class Feed:
 
         Returns the segment geometry as well as additional segment information
         """
+        logging.info('Getting segments...')
         stop_times = self.stop_times
         shapes = self.shapes
 
@@ -753,13 +806,16 @@ class Feed:
         # merge stop_times and shapes to calculate cut distance and interpolated point
         df_shape_stop = stop_times[req_columns + add_columns].drop_duplicates()\
             .merge(shapes, on="shape_id", suffixes=("_stop", "_shape"))
+        logging.info('Projecting stops onto shape...')
         df_shape_stop["cut_distance_stop_point"] = df_shape_stop[["geometry_stop", "geometry_shape"]]\
             .apply(lambda x: x[1].project(x[0], normalized=True), axis=1)
+        logging.info('Interpolating stops onto shape...')
         df_shape_stop["projected_stop_point"] = df_shape_stop[["geometry_shape", "cut_distance_stop_point"]]\
             .apply(lambda x: x[0].interpolate(x[1], normalized=True), axis=1)
 
         # calculate cut distance for 
-        df_shape = shapes.copy()
+        logging.info('Sorting shape points and stops...')
+        df_shape = shapes[shapes.shape_id.isin(stop_times.shape_id.unique())]
         df_shape["list_of_points"] = df_shape.geometry.apply(lambda x: list(MultiPoint(x.coords).geoms))
         df_shape_exp = df_shape.explode("list_of_points")
         df_shape_exp["projected_line_points"] = df_shape_exp[["geometry", "list_of_points"]].apply(lambda x: x[0].project(x[1], normalized=True), axis=1)
@@ -954,6 +1010,89 @@ class Feed:
         data_complete = data_complete.loc[~data_complete.geometry.isnull()][keep_these]
 
         return data_complete
+    
+
+    def get_distance_between_stops(self):
+        """
+        Compared H3 hex bins to DBSCAN clusters in this map:
+        https://studio.foursquare.com/public/8436b10c-4ccc-48a3-a232-e8026f81a117
+
+        From what I see, the optimal resolution for our purposes is resolution=9.
+        Taking the Hex bin at this resolution and its neighbors works as a better
+        clustering method than DBSCAN. 
+
+        We can then only calculate the distance between each stop and the ones that
+        are in the neighboring hex bins.
+        """
+        stops_ = self.stops.copy()
+
+        logging.info('Getting hex bins.')
+        RESOLUTION = 9
+
+        stops_hash = stops_.to_dict()['stop_id']
+        stops_.reset_index(inplace=True)
+        stops_.rename(columns=dict(index = 'stop_index'), inplace=True)
+
+        stops_['hex'] = stops_.apply(
+            lambda row: geo_to_h3(row.stop_lat, row.stop_lon, RESOLUTION), axis=1)
+
+        # stops.head()
+
+        # Stops to utm for distance calculatin
+        utm_stops = stops_[
+            ['stop_index', 'stop_id', 'stop_name', 'hex', 'geometry']].to_crs(code(stops_))
+
+        # # Hash for faster results
+        # stops_h3_hash = stops.set_index('stop_index').to_dict()['hex']
+        # h3_stops_hash = stops.set_index('hex').to_dict()['stop_index']
+
+        # Stops in Hexbins
+        h3_stops = stops_.groupby('hex').stop_index.apply(list)
+        h3_geos = utm_stops.groupby('hex').geometry.apply(list)
+
+        #  Unique hex
+        h3_neighbors = {hex: k_ring(hex, k=1) for hex in stops_.hex.unique()}
+
+        st = time()
+
+        stops_comb = []
+        distances = []
+
+        logging.info('Looking for stop distances')
+
+        for hex, h3_group in h3_neighbors.items():
+            s_index = h3_stops[h3_stops.index.isin(h3_group)].values
+            s_geos = h3_geos[h3_geos.index.isin(h3_group)].values
+            
+            stops_list = list(chain.from_iterable(s_index))
+            geo_list = list(chain.from_iterable(s_geos))
+            geo_perm = list(permutations(geo_list, 2))
+
+            stops_comb.extend(list(permutations(stops_list, 2)))
+            distances.extend([distance(pair[0], pair[1]) for pair in geo_perm])
+
+        # Make dataframe
+        dist_df = pd.DataFrame(data=stops_comb, columns=['stop_index_1', 'stop_index_2'])
+        dist_df['distance_m'] = distances
+        dist_df.drop_duplicates(subset=['stop_index_1', 'stop_index_2'], inplace=True)
+
+        et = time()
+        # print(f'Calculating distances took {et-st} seconds')
+        logging.info(f'Calculating distances took {et-st} seconds')
+
+        logging.info(f'Calculate walking times')
+
+        # Calculate walking times
+        # Assume 1.11 m/s as average walking speed as the literature suggests (4km/h=1.11 m/s)
+        walking_speed_ms = 4 / 3.6
+        dist_df['connection_time_min'] =\
+            dist_df.distance_m * walking_speed_ms / 60
+        
+        # Add stop_id to distance matrix
+        dist_df['stop_id_1'] = dist_df.stop_index_1.apply(lambda x: stops_hash[x])
+        dist_df['stop_id_2'] = dist_df.stop_index_2.apply(lambda x: stops_hash[x])
+        
+        return dist_df
 
 
 def extract_file(file, feed):
