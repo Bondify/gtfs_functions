@@ -643,7 +643,7 @@ speeds.head(1)
 
 ```python
 segments_freq = feed.segments_freq
-seg_freq.head(2)
+segments_freq.head(2)
 ```
 
 
