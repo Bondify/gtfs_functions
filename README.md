@@ -4,15 +4,22 @@ This package allows you to create various layers directly from the GTFS and visu
 
 ## Update November 2023:
 * Possibility to check the `service_id` for a given date:
-`parsed_calendar = Feed(gtfs_path).parse_calendar()`
+
+```python
+parsed_calendar = Feed(gtfs_path).parse_calendar()
+```
 
 or if you want it already grouped by date:
-`date_service = Feed(gtfs_path).get_dates_service_id()` 
+``` python
+date_service = Feed(gtfs_path).get_dates_service_id()
+``` 
 
 
 ## Update August 2023:
 * Possibility to parse the GTFS for a specific date range.
-`feed = Feed(gtfs_path, start_date='2023-03-31', end_date='2023-04-04')`
+```python
+feed = Feed(gtfs_path, start_date='2023-03-31', end_date='2023-04-04')
+```
 
 ## Update March 2023:
 * Removed dependency with [partridge](https://github.com/remix/partridge). As much as we love this package and think it is absolutely great, removing a dependency gives us more control and keeps this package from failing whenever something changes in `partridge`.
@@ -636,7 +643,7 @@ speeds.head(1)
 
 ```python
 segments_freq = feed.segments_freq
-seg_freq.head(2)
+segments_freq.head(2)
 ```
 
 
