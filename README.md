@@ -2,9 +2,17 @@
 
 This package allows you to create various layers directly from the GTFS and visualize the results in the most straightforward way possible.
 
+## Update November 2023:
+* Possibility to check the `service_id` for a given date:
+`parsed_calendar = Feed(gtfs_path).parse_calendar()`
+
+or if you want it already grouped by date:
+`date_service = Feed(gtfs_path).get_dates_service_id()` 
+
+
 ## Update August 2023:
-* Possibility to parse the GTFS for a specific date.
-`feed = Feed(gtfs_path, dates=['2023-03-31', '2023-04-01'])`
+* Possibility to parse the GTFS for a specific date range.
+`feed = Feed(gtfs_path, start_date='2023-03-31', end_date='2023-04-04')`
 
 ## Update March 2023:
 * Removed dependency with [partridge](https://github.com/remix/partridge). As much as we love this package and think it is absolutely great, removing a dependency gives us more control and keeps this package from failing whenever something changes in `partridge`.
@@ -37,12 +45,12 @@ conda create -n new-env python=3.8
 
 You can install the package running the following in your console:
 ```console
-pip install gtfs_functions==2.0.3
+pip install gtfs_functions
 ```
 
 Import the package in your script/notebook
 ```python
-from gtfs_functions import Feed, map_gdf
+from gtfs_functions import Feed
 ```
 
 # GTFS Import <a class="anchor" id="gtfs_parsing"></a>
