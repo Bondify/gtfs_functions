@@ -2,3 +2,4 @@ data
 example
 notebooks
 *.pyc
+*.sh
