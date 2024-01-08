@@ -1146,7 +1146,7 @@ def extract_file(file, feed):
                 return logging.info(f'File "{file}.txt" not found.')     
         
         # Try as a URL
-        except FileNotFoundError as e:
+        except (FileNotFoundError, OSError) as e:
             if f'{file}.txt' in files:
                 r = requests.get(gtfs_path)
                 with ZipFile(io.BytesIO(r.content)) as myzip:
