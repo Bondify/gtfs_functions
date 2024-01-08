@@ -294,8 +294,9 @@ class Feed:
         try:
             with ZipFile(self.gtfs_path) as myzip:
                 return myzip.namelist()    
+            
         # Try as a URL if the file is not in local
-        except FileNotFoundError as e:
+        except (FileNotFoundError, OSError) as e:
             
             r = requests.get(self.gtfs_path)
 
