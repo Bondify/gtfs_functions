@@ -500,6 +500,9 @@ class Feed:
         
         # Explode filtered_dates
         t = calendar[['service_id', 'filtered_dates']].explode('filtered_dates')
+        
+        # Keep the service_ids that apply to at least one date
+        t = t[t.filtered_dates.notnull()]
         t['filtered_dates'] = t.filtered_dates.dt.date.astype(str)
 
         t = t.groupby('filtered_dates').service_id.apply(list)
