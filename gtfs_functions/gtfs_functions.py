@@ -14,6 +14,7 @@ from itertools import permutations, chain
 from shapely import distance
 from h3 import geo_to_h3, k_ring
 from time import time
+import boto3
 import io
 import sys
 import pendulum as pl
@@ -291,16 +292,30 @@ class Feed:
         self._dates_service_id = value
 
     def get_files(self):
-        try:
-            with ZipFile(self.gtfs_path) as myzip:
-                return myzip.namelist()    
-        # Try as a URL if the file is not in local
-        except FileNotFoundError as e:
-            
-            r = requests.get(self.gtfs_path)
+        gtfs_path = self.gtfs_path
 
-            with ZipFile(io.BytesIO(r.content)) as myzip:
-                return myzip.namelist()
+        # S3 implementation
+        if gtfs_path.split('://')[0]=='s3':
+            s3 = boto3.resource('s3')
+            bucket = gtfs_path.split('://')[1].split('/')[0]
+            boto_bucket = s3.Bucket(bucket)
+            key = '/'.join(gtfs_path.split('/')[3:])
+            
+            with io.BytesIO() as data:
+                boto_bucket.download_fileobj(key, data)
+                with ZipFile(data) as myzip:
+                    return myzip.namelist()
+        else:
+            try:
+                with ZipFile(gtfs_path) as myzip:
+                    return myzip.namelist()    
+            # Try as a URL if the file is not in local
+            except FileNotFoundError as e:
+                
+                r = requests.get(self.gtfs_path)
+
+                with ZipFile(io.BytesIO(r.content)) as myzip:
+                    return myzip.namelist()
 
     def get_bbox(self):
         logging.info('Getting the bounding box.')
@@ -579,7 +594,7 @@ class Feed:
                 max_trips = date_ntrips[date_ntrips==date_ntrips.max()].values[0]
 
                 logging.info(f'The busiest date/s of this feed or your selected date range is/are:  {busiest_date} with {max_trips} trips.')
-                logging.info('In that more than one busiest date was found, the first one will be considered.')
+                logging.info('In the case that more than one busiest date was found, the first one will be considered.')
                 logging.info(f'In this case is {busiest_date[0]}.')
 
                 # We need "dates" to be a list
