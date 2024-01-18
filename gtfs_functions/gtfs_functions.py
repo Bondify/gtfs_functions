@@ -355,9 +355,9 @@ class Feed:
                 logging.info('End date is None so we will take today as end date.')
                 
                 pl_end_date = pl.today()
-
+            
             # Get all dates between start and end date
-            period = pl.period(pl_start_date, pl_end_date)
+            period = pl.interval(pl_start_date, pl_end_date)
 
             return [day.to_date_string() for day in period]
         else:
@@ -470,7 +470,7 @@ class Feed:
         # Get all dates for a given service_id
         calendar['all_dates'] = calendar.apply(
             lambda x: np.array([
-                d for d in pl.period(x.start_date_dt, x.end_date_dt).range('days')
+                d for d in pl.interval(x.start_date_dt, x.end_date_dt).range('days')
                 ]), axis=1
             )
         
