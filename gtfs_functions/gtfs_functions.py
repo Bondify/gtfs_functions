@@ -14,6 +14,7 @@ from itertools import permutations, chain
 from shapely import distance
 from h3 import geo_to_h3, k_ring
 from time import time
+import boto3
 import io
 import sys
 import pendulum as pl
@@ -291,16 +292,30 @@ class Feed:
         self._dates_service_id = value
 
     def get_files(self):
-        try:
-            with ZipFile(self.gtfs_path) as myzip:
-                return myzip.namelist()    
-        # Try as a URL if the file is not in local
-        except FileNotFoundError as e:
-            
-            r = requests.get(self.gtfs_path)
+        gtfs_path = self.gtfs_path
 
-            with ZipFile(io.BytesIO(r.content)) as myzip:
-                return myzip.namelist()
+        # S3 implementation
+        if gtfs_path.split('://')[0]=='s3':
+            s3 = boto3.resource('s3')
+            bucket = gtfs_path.split('://')[1].split('/')[0]
+            boto_bucket = s3.Bucket(bucket)
+            key = '/'.join(gtfs_path.split('/')[3:])
+            
+            with io.BytesIO() as data:
+                boto_bucket.download_fileobj(key, data)
+                with ZipFile(data) as myzip:
+                    return myzip.namelist()
+        else:
+            try:
+                with ZipFile(gtfs_path) as myzip:
+                    return myzip.namelist()    
+            # Try as a URL if the file is not in local
+            except FileNotFoundError as e:
+                
+                r = requests.get(self.gtfs_path)
+
+                with ZipFile(io.BytesIO(r.content)) as myzip:
+                    return myzip.namelist()
 
     def get_bbox(self):
         logging.info('Getting the bounding box.')
@@ -340,9 +355,9 @@ class Feed:
                 logging.info('End date is None so we will take today as end date.')
                 
                 pl_end_date = pl.today()
-
+            
             # Get all dates between start and end date
-            period = pl.period(pl_start_date, pl_end_date)
+            period = pl.interval(pl_start_date, pl_end_date)
 
             return [day.to_date_string() for day in period]
         else:
@@ -455,7 +470,7 @@ class Feed:
         # Get all dates for a given service_id
         calendar['all_dates'] = calendar.apply(
             lambda x: np.array([
-                d for d in pl.period(x.start_date_dt, x.end_date_dt).range('days')
+                d for d in pl.interval(x.start_date_dt, x.end_date_dt).range('days')
                 ]), axis=1
             )
         
@@ -485,6 +500,9 @@ class Feed:
         
         # Explode filtered_dates
         t = calendar[['service_id', 'filtered_dates']].explode('filtered_dates')
+        
+        # Keep the service_ids that apply to at least one date
+        t = t[t.filtered_dates.notnull()]
         t['filtered_dates'] = t.filtered_dates.dt.date.astype(str)
 
         t = t.groupby('filtered_dates').service_id.apply(list)
@@ -579,7 +597,7 @@ class Feed:
                 max_trips = date_ntrips[date_ntrips==date_ntrips.max()].values[0]
 
                 logging.info(f'The busiest date/s of this feed or your selected date range is/are:  {busiest_date} with {max_trips} trips.')
-                logging.info('In that more than one busiest date was found, the first one will be considered.')
+                logging.info('In the case that more than one busiest date was found, the first one will be considered.')
                 logging.info(f'In this case is {busiest_date[0]}.')
 
                 # We need "dates" to be a list

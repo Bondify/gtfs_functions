@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "gtfs-functions"
-version = "2.1"
+version = "2.2"
 authors = [
   { name="Santiago Toso", email="santiagoa.toso@gmail.com" },
 ]
@@ -23,10 +23,11 @@ dependencies = [
     "shapely", "utm>=0.7.0", 
     #"numpy>=1.24.2",
     'numpy',
-    "pendulum>=2.0.0",
+    "pendulum>=3.0.0",
     "branca>=0.6.0",
     "plotly>=5.13.0", "jenkspy>=0.3.2", "folium>=0.14.0",
-    "unicode>=2.9"
+    "unicode>=2.9",
+    "h3", "boto3"
 ]
 
 [project.urls]
