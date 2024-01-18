@@ -707,6 +707,9 @@ class Feed:
     def get_shapes(self):
         if self.geo:
             aux = extract_file('shapes', self)
+
+            # Sort shapes by shape_pt_sequence
+            aux.sort_values(['shape_id','shape_pt_sequence'], inplace=True)
             shapes = aux[["shape_id", "shape_pt_lat", "shape_pt_lon"]]\
                 .groupby("shape_id")\
                     .agg(list)\
