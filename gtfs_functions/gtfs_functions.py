@@ -38,7 +38,9 @@ class Feed:
             start_date: str = None,
             end_date: str = None
             ):
-
+        """
+        Feed class to handle GTFS data.
+        """
         self._gtfs_path = gtfs_path
         self._time_windows = time_windows
         self._busiest_date = busiest_date
@@ -463,60 +465,71 @@ class Feed:
         calendar_dates = self.calendar_dates
         busiest_date = self.busiest_date
 
-        # Parse dates
-        calendar['start_date_dt'] = calendar.start_date.astype(str).apply(pl.parse)
-        calendar['end_date_dt'] = calendar.end_date.astype(str).apply(pl.parse) 
+        gtfs_dates = []
+        hashes = []
 
-        # Get all dates for a given service_id
-        calendar['all_dates'] = calendar.apply(
-            lambda x: np.array([
-                d for d in pl.interval(x.start_date_dt, x.end_date_dt).range('days')
-                ]), axis=1
-            )
-        
-        # Boolean variables for day types
-        cols = [
-            'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
-            'saturday', 'sunday']
-        
-        vf = np.vectorize(bool)
-        calendar[cols] = vf(calendar[cols].values)
+        if calendar is not None:
+            # Parse dates
+            calendar['start_date_dt'] = calendar.start_date.astype(str).apply(pl.parse)
+            calendar['end_date_dt'] = calendar.end_date.astype(str).apply(pl.parse) 
 
-        # Hash weekdays to make it faster
-        def get_hash_weekdays(row):
-            return {
-                i: v
-                for i, v in enumerate(row[cols].values[0])
-            }
+            # Get all dates for a given service_id
+            calendar['all_dates'] = calendar.apply(
+                lambda x: np.array([
+                    d for d in pl.interval(x.start_date_dt, x.end_date_dt).range('days')
+                    ]), axis=1
+                )
+            
+            # Boolean variables for day types
+            cols = [
+                'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
+                'saturday', 'sunday']
+            
+            vf = np.vectorize(bool)
+            calendar[cols] = vf(calendar[cols].values)
 
-        hash_weekdays = calendar.groupby('service_id').apply(get_hash_weekdays)
+            # Hash weekdays to make it faster
+            def get_hash_weekdays(row):
+                return {
+                    i: v
+                    for i, v in enumerate(row[cols].values[0])
+                }
 
-        # Filter dates depending on the days of the week
-        calendar['filtered_dates'] = calendar.apply(lambda row: row.all_dates[
-            [
-                hash_weekdays[row.service_id][d.weekday()]
-                for d in row.all_dates
-            ]], axis=1)
-        
-        # Explode filtered_dates
-        t = calendar[['service_id', 'filtered_dates']].explode('filtered_dates')
-        
-        # Keep the service_ids that apply to at least one date
-        t = t[t.filtered_dates.notnull()]
-        t['filtered_dates'] = t.filtered_dates.dt.date.astype(str)
+            hash_weekdays = calendar.groupby('service_id').apply(get_hash_weekdays)
 
-        t = t.groupby('filtered_dates').service_id.apply(list)
+            # Filter dates depending on the days of the week
+            calendar['filtered_dates'] = calendar.apply(lambda row: row.all_dates[
+                [
+                    hash_weekdays[row.service_id][d.weekday()]
+                    for d in row.all_dates
+                ]], axis=1)
+            
+            # Explode filtered_dates
+            t = calendar[['service_id', 'filtered_dates']].explode('filtered_dates')
+            
+            # Keep the service_ids that apply to at least one date
+            t = t[t.filtered_dates.notnull()]
+            t['filtered_dates'] = t.filtered_dates.dt.date.astype(str)
 
-        # Create dictionary with dates as keys and service_id as items
-        date_hash = t.apply(lambda x: dict(zip(x, [True] * len(x)))).to_dict()
+            t = t.groupby('filtered_dates').service_id.apply(list)
 
-        # --- Do the same for calendar_dates ---
-        calendar_dates['date_str'] = calendar_dates.date.astype(str).apply(pl.parse)\
-            .dt.date.astype(str)
-        
-        cdates_hash = calendar_dates[calendar_dates.exception_type==1].groupby('date_str')\
-            .service_id.apply(list)\
-            .apply(lambda x: dict(zip(x, [True] * len(x)))).to_dict()
+            # Create dictionary with dates as keys and service_id as items
+            date_hash = t.apply(lambda x: dict(zip(x, [True] * len(x)))).to_dict()
+
+            gtfs_dates = gtfs_dates + list(date_hash.keys())
+            hashes = hashes + [date_hash]
+
+        if calendar_dates is not None:
+            # --- Do the same for calendar_dates ---
+            calendar_dates['date_str'] = calendar_dates.date.astype(str).apply(pl.parse)\
+                .dt.date.astype(str)
+            
+            cdates_hash = calendar_dates[calendar_dates.exception_type==1].groupby('date_str')\
+                .service_id.apply(list)\
+                .apply(lambda x: dict(zip(x, [True] * len(x)))).to_dict()
+            
+            gtfs_dates = gtfs_dates + list(cdates_hash.keys())
+            hashes = hashes + [cdates_hash]
 
         
         # Were dates provided or we're looking for the busiest_date?
@@ -525,14 +538,15 @@ class Feed:
             # To do enable that we need to return the complete
             # list of dates to `get_trips()`
             # Get max date and min date
-            dates = list(date_hash.keys()) + list(cdates_hash.keys())
+            dates = gtfs_dates
         else:
             dates = self.dates
 
             # Check if the dates have service in the calendars
             remove_dates = []
             for i, d in enumerate(dates):
-                if (d not in date_hash) & (d not in cdates_hash):
+                if d not in gtfs_dates:
+                # if (d not in date_hash) & (d not in cdates_hash):
                     print(f'The date "{d}" does not have service in this feed and will be removed from the analysis.')
                     remove_dates.append(d)
 
@@ -540,7 +554,7 @@ class Feed:
                 dates.remove(d)
 
         # Create dataframe with the service_id that applies to each date        
-        aux = pd.concat([pd.DataFrame(date_hash), pd.DataFrame(cdates_hash)]).T.reset_index()
+        aux = pd.concat([pd.DataFrame(h) for h in hashes]).T.reset_index()
         dates_service_id = pd.melt(aux, id_vars='index', value_vars=aux.columns)
         dates_service_id.columns=['date', 'service_id', 'keep']
         
