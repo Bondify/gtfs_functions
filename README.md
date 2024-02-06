@@ -707,34 +707,42 @@ segments_freq.head(2)
 ## Stop frequencies
 ```python
 # Stops
+from gtfs_functions.gtfs_plots import map_gdf
+
 condition_dir = stop_freq.dir_id == 'Inbound'
 condition_window = stop_freq.window == '6:00-9:00'
 
 gdf = stop_freq.loc[(condition_dir & condition_window),:].reset_index()
 
-gtfs.map_gdf(gdf = gdf, 
-              variable = 'ntrips', 
-              colors = ["#d13870", "#e895b3" ,'#55d992', '#3ab071', '#0e8955','#066a40'], 
-              tooltip_var = ['min_per_trip'] , 
-              tooltip_labels = ['Frequency: '], 
-              breaks = [10, 20, 30, 40, 120, 200])
+map_gdf(
+  gdf = gdf, 
+  variable = 'ntrips', 
+  colors = ["#d13870", "#e895b3" ,'#55d992', '#3ab071', '#0e8955','#066a40'], 
+  tooltip_var = ['min_per_trip'] , 
+  tooltip_labels = ['Frequency: '], 
+  breaks = [10, 20, 30, 40, 120, 200]
+)
 ```
 ![stops](/images/map_stop_freq.jpg)
 
 ## Line frequencies
 ```python
 # Line frequencies
+from gtfs_functions.gtfs_plots import map_gdf
+
 condition_dir = line_freq.direction_id == 'Inbound'
 condition_window = line_freq.window == '6:00-9:00'
 
 gdf = line_freq.loc[(condition_dir & condition_window),:].reset_index()
 
-gtfs.map_gdf(gdf = gdf, 
-              variable = 'ntrips', 
-              colors = ["#d13870", "#e895b3" ,'#55d992', '#3ab071', '#0e8955','#066a40'], 
-              tooltip_var = ['route_name'] , 
-              tooltip_labels = ['Route: '], 
-              breaks = [5, 10, 20, 50])
+map_gdf(
+  gdf = gdf, 
+  variable = 'ntrips', 
+  colors = ["#d13870", "#e895b3" ,'#55d992', '#3ab071', '#0e8955','#066a40'], 
+  tooltip_var = ['route_name'] , 
+  tooltip_labels = ['Route: '], 
+  breaks = [5, 10, 20, 50]
+)
 ```
 ![line](/images/map_line_freq.jpg)
 
