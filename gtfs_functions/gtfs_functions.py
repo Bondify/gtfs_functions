@@ -1157,15 +1157,18 @@ def extract_file(file, feed):
         boto_bucket = s3.Bucket(bucket)
         key = '/'.join(gtfs_path.split('/')[3:])
         
-        with io.BytesIO() as data:
-            boto_bucket.download_fileobj(key, data)
-            with ZipFile(data) as myzip:
-                logging.info(f'Reading "{file}.txt".')
-                myzip.extract(file_path, path='/tmp')
-                data = pd.read_csv(f'/tmp/{file_path}', dtype=data_types)
+        try:
+            with io.BytesIO() as data:
+                boto_bucket.download_fileobj(key, data)
+                with ZipFile(data) as myzip:
+                    logging.info(f'Reading "{file}.txt".')
+                    myzip.extract(file_path, path='/tmp')
+                    data = pd.read_csv(f'/tmp/{file_path}', dtype=data_types)
 
-                os.remove(f"/tmp/{file_path}")
-                return data
+                    os.remove(f"/tmp/{file_path}")
+                    return data
+        except (FileNotFoundError, OSError, KeyError) as e:
+            return logging.info(f'File "{file}.txt" not found.')    
     else:
         try:
             if file_path in files:
