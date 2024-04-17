@@ -38,9 +38,7 @@ class Feed:
             start_date: str = None,
             end_date: str = None
             ):
-        """
-        Feed class to handle GTFS data.
-        """
+
         self._gtfs_path = gtfs_path
         self._time_windows = time_windows
         self._busiest_date = busiest_date
@@ -293,6 +291,7 @@ class Feed:
     def dates_service_id(self, value):
         self._dates_service_id = value
 
+
     def get_files(self):
         gtfs_path = self.gtfs_path
 
@@ -318,6 +317,7 @@ class Feed:
 
                 with ZipFile(io.BytesIO(r.content)) as myzip:
                     return myzip.namelist()
+
 
     def get_bbox(self):
         logging.info('Getting the bounding box.')
@@ -454,19 +454,16 @@ class Feed:
 
     def get_calendar(self):
         return extract_file('calendar', self)
-
+        
 
     def get_calendar_dates(self):
         return extract_file('calendar_dates', self)
-
+        
 
     def parse_calendar(self):
         calendar = self.calendar
         calendar_dates = self.calendar_dates
         busiest_date = self.busiest_date
-
-        gtfs_dates = []
-        hashes = []
 
         if calendar is not None:
             # Parse dates
@@ -515,10 +512,9 @@ class Feed:
 
             # Create dictionary with dates as keys and service_id as items
             date_hash = t.apply(lambda x: dict(zip(x, [True] * len(x)))).to_dict()
-
-            gtfs_dates = gtfs_dates + list(date_hash.keys())
-            hashes = hashes + [date_hash]
-
+        else:
+            date_hash = {}    
+        
         if calendar_dates is not None:
             # --- Do the same for calendar_dates ---
             calendar_dates['date_str'] = calendar_dates.date.astype(str).apply(pl.parse)\
@@ -527,26 +523,23 @@ class Feed:
             cdates_hash = calendar_dates[calendar_dates.exception_type==1].groupby('date_str')\
                 .service_id.apply(list)\
                 .apply(lambda x: dict(zip(x, [True] * len(x)))).to_dict()
-            
-            gtfs_dates = gtfs_dates + list(cdates_hash.keys())
-            hashes = hashes + [cdates_hash]
+        else:
+            cdates_hash = {}
 
-        
         # Were dates provided or we're looking for the busiest_date?
         if busiest_date:
             # We need to look for the busiest date.
             # To do enable that we need to return the complete
             # list of dates to `get_trips()`
             # Get max date and min date
-            dates = gtfs_dates
+            dates = list(date_hash.keys()) + list(cdates_hash.keys())
         else:
             dates = self.dates
 
             # Check if the dates have service in the calendars
             remove_dates = []
             for i, d in enumerate(dates):
-                if d not in gtfs_dates:
-                # if (d not in date_hash) & (d not in cdates_hash):
+                if (d not in date_hash) & (d not in cdates_hash):
                     print(f'The date "{d}" does not have service in this feed and will be removed from the analysis.')
                     remove_dates.append(d)
 
@@ -554,7 +547,7 @@ class Feed:
                 dates.remove(d)
 
         # Create dataframe with the service_id that applies to each date        
-        aux = pd.concat([pd.DataFrame(h) for h in hashes]).T.reset_index()
+        aux = pd.concat([pd.DataFrame(date_hash), pd.DataFrame(cdates_hash)]).T.reset_index()
         dates_service_id = pd.melt(aux, id_vars='index', value_vars=aux.columns)
         dates_service_id.columns=['date', 'service_id', 'keep']
         
@@ -691,7 +684,7 @@ class Feed:
 
         # We merge stop_times to "trips" (not the other way around) because
         # "trips" have already been filtered by the busiest service_id
-        stop_times = trips.merge(stop_times, how='left')
+        stop_times = trips.merge(stop_times, how='inner')
         
         if self.geo:
             stop_times = stop_times.merge(stops, how='left')
@@ -1144,11 +1137,8 @@ def extract_file(file, feed):
     # check if the the zip file came from a zipped folder 
     if len(files[0].split('/')) == 1:
         file_path = f"{file}.txt"
-        mid_folder = False
     else:
-        mid_folder = True
         file_path = f"{files[0].split('/')[0]}/{file}.txt"
-        mid_folder_path = f"/tmp/{files[0].split('/')[0]}"
 
     # S3 implementation
     if gtfs_path.split('://')[0]=='s3':
@@ -1157,9 +1147,9 @@ def extract_file(file, feed):
         boto_bucket = s3.Bucket(bucket)
         key = '/'.join(gtfs_path.split('/')[3:])
         
-        try:
-            with io.BytesIO() as data:
-                boto_bucket.download_fileobj(key, data)
+        with io.BytesIO() as data:
+            boto_bucket.download_fileobj(key, data)
+            try:
                 with ZipFile(data) as myzip:
                     logging.info(f'Reading "{file}.txt".')
                     myzip.extract(file_path, path='/tmp')
@@ -1167,8 +1157,8 @@ def extract_file(file, feed):
 
                     os.remove(f"/tmp/{file_path}")
                     return data
-        except (FileNotFoundError, OSError, KeyError) as e:
-            return logging.info(f'File "{file}.txt" not found.')    
+            except (FileNotFoundError, OSError, KeyError) as e:
+                return logging.info(f'File "{file}.txt" not found.')
     else:
         try:
             if file_path in files:
@@ -1180,7 +1170,7 @@ def extract_file(file, feed):
                     os.remove(f"/tmp/{file_path}")
                     return data
             else:
-                return logging.info(f'File "{file}.txt" not found.')     
+                return logging.info(f'File "{file}.txt" not found.')
         
         # Try as a URL
         except (FileNotFoundError, OSError) as e:
@@ -1194,4 +1184,4 @@ def extract_file(file, feed):
                     os.remove(f"/tmp/{file_path}")
                     return data
             else:
-                return logging.info(f'File "{file}.txt" not found.') 
+                return logging.info(f'File "{file}.txt" not found.')
