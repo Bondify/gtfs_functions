@@ -1128,7 +1128,8 @@ def extract_file(file, feed):
         'shape_id': str,
         'stop_id': str,
         'route_id': str,
-        'trip_id': str
+        'trip_id': str,
+        'service_id': str
     }
 
     files = feed.files
