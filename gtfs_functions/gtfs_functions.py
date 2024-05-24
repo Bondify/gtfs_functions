@@ -664,6 +664,10 @@ class Feed:
 
         stops['stop_id'] = stops.stop_id.astype(str)
         stops['stop_name'] = stops.stop_name.astype(str)
+        
+        # 'stop_code' has shown to be important in some agencies
+        if 'stop_code' in stops.columns:
+            stops['stop_code'] = stops.stop_code.astype(str)
 
         return stops
 
