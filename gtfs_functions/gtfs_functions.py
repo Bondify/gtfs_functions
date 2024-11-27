@@ -622,7 +622,7 @@ class Feed:
         # To allow processing incomplete GTFS data, we must reindex instead:
         # https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#deprecate-loc-reindex-listlike
         # This will add NaN for any missing columns.
-        cols = ['trip_id', 'route_id', 'route_name', 'service_id', 'direction_id', 'shape_id']
+        cols = ['trip_id', 'trip_headsign', 'route_id', 'route_name', 'service_id', 'direction_id', 'shape_id']
         trips = add_route_name(trips, routes).reindex(columns=cols)
         
         # Fill null values
