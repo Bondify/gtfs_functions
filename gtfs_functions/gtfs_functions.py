@@ -12,7 +12,7 @@ from shapely.geometry import LineString, MultiPoint
 from gtfs_functions.aux_functions import *
 from itertools import permutations, chain
 from shapely import distance
-from h3 import geo_to_h3, k_ring
+from h3 import latlng_to_cell, grid_ring
 from time import time
 import boto3
 import io
@@ -1062,7 +1062,7 @@ class Feed:
         stops_.rename(columns=dict(index = 'stop_index'), inplace=True)
 
         stops_['hex'] = stops_.apply(
-            lambda row: geo_to_h3(row.stop_lat, row.stop_lon, RESOLUTION), axis=1)
+            lambda row: latlng_to_cell(row.stop_lat, row.stop_lon, RESOLUTION), axis=1)
 
         # stops.head()
 
@@ -1079,7 +1079,7 @@ class Feed:
         h3_geos = utm_stops.groupby('hex').geometry.apply(list)
 
         #  Unique hex
-        h3_neighbors = {hex: k_ring(hex, k=1) for hex in stops_.hex.unique()}
+        h3_neighbors = {hex: grid_ring(hex, k=1) for hex in stops_.hex.unique()}
 
         st = time()
 
