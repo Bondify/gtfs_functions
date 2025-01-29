@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "gtfs-functions"
-version = "2.5"
+version = "2.6"
 authors = [
   { name="Santiago Toso", email="santiagoa.toso@gmail.com" },
 ]
