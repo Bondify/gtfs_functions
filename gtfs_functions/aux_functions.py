@@ -72,6 +72,25 @@ def add_speed(speeds):
 
     return speeds
 
+def detect_loops(df):
+    """
+    Runs on a shape_stop df, grouped by patterns and warns on the number of 
+        potential loops detected
+    """
+    df['cdsp_prev_stop'] = df['cut_distance_stop_point'].shift(1).fillna(0)
+    df['cdsp_next_stop'] = df['cut_distance_stop_point'].shift(-1).fillna(1)
+    df['prev_wrong'] = (df['cdsp_prev_stop'] > df['cut_distance_stop_point'])
+    df['next_wrong'] = (df['cdsp_next_stop'] < df['cut_distance_stop_point'])
+    #df['cdsp_next_ordered']
+    if df['next_wrong'].any() or df['prev_wrong'].any():
+        num_loops = (df['prev_wrong'].sum() + df['next_wrong'].sum())//2
+        logging.warning(f"Identified {num_loops} loops in Pattern "
+                        f"{df['shape_id'].iloc[0]} of Route "
+                        f"{df['route_name'].iloc[0]}")
+        return False
+    else:
+        return True
+
 
 def fix_outliers(speeds):
     # Calculate average speed to modify outliers

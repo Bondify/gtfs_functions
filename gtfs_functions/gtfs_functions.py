@@ -14,6 +14,7 @@ from gtfs_functions.aux_functions import (
     add_runtime,
     add_distance,
     add_speed,
+    detect_loops,
     code,
     fix_outliers,
     num_to_letters,
@@ -52,6 +53,7 @@ class Feed:
         patterns: bool = True,
         start_date: str = None,
         end_date: str = None,
+        fix_loops: bool = False
     ):
 
         self._gtfs_path = gtfs_path
@@ -61,6 +63,7 @@ class Feed:
         self._patterns = patterns
         self._start_date = start_date
         self._end_date = end_date
+        self._fix_loops = fix_loops
         self._dates = None
         self._routes_patterns = None
         self._trips_patterns = None
@@ -871,6 +874,9 @@ class Feed:
         """Splits each route's shape into stop-stop LineString called segments
 
         Returns the segment geometry as well as additional segment information
+
+        If fix_loops is set to true on init, will attempt experimental
+            loop-resolution recursion.
         """
         logging.info("Getting segments...")
         stop_times = self.stop_times
@@ -886,9 +892,15 @@ class Feed:
             .merge(shapes, on="shape_id", suffixes=("_stop", "_shape"))
         )
         logging.info("Projecting stops onto shape...")
-        df_shape_stop["cut_distance_stop_point"] = df_shape_stop[["geometry_stop", "geometry_shape"]].apply(
-            lambda x: x[1].project(x[0], normalized=True), axis=1
-        )
+        df_shape_stop["cut_distance_stop_point"] = \
+            df_shape_stop['geometry_shape'].project(
+                df_shape_stop['geometry_stop'], normalized=True
+                )
+        df_shape_stop_group = df_shape_stop.groupby("shape_id")
+        test = df_shape_stop_group.apply(detect_loops)
+        if test.any():
+            logging.warning("Detected looped routes! It is recommended you " \
+                            "re-initialize the feed with fix_loops enabled")
         logging.info("Interpolating stops onto shape...")
         df_shape_stop["projected_stop_point"] = df_shape_stop[["geometry_shape", "cut_distance_stop_point"]].apply(
             lambda x: x[0].interpolate(x[1], normalized=True), axis=1
