@@ -3,3 +3,5 @@ example
 notebooks
 *.pyc
 *.sh
+Segments_Debugging.ipynb
+segments.zip
