@@ -4,6 +4,9 @@ import utm
 import geopandas as gpd
 import logging
 import numpy as np
+from shapely import Point
+from shapely import LineString
+from shapely.ops import substring
 
 
 def add_runtime(st):
@@ -71,6 +74,144 @@ def add_speed(speeds):
     speeds = speeds.loc[~speeds.speed_kmh.isnull()]
 
     return speeds
+
+def detect_loops(df):
+    """
+    Runs on a shape_stop df, grouped by patterns and warns on the number of 
+        potential loops detected
+    
+    Returns false if there are loops detected, True if not
+    """
+    df['cdsp_prev_stop'] = df['cut_distance_stop_point'].shift(1).fillna(0)
+    df['cdsp_next_stop'] = df['cut_distance_stop_point'].shift(-1).fillna(1)
+    df['prev_wrong'] = (df['cdsp_prev_stop'] > df['cut_distance_stop_point'])
+    df['next_wrong'] = (df['cdsp_next_stop'] < df['cut_distance_stop_point'])
+    #df['cdsp_next_ordered']
+    if df['next_wrong'].any() or df['prev_wrong'].any():
+        num_loops = (df['prev_wrong'].sum() + df['next_wrong'].sum())//2
+        logging.warning(f"Identified {num_loops} loops in Pattern "
+                        f"{df['shape_id'].iloc[0]} of Route "
+                        f"{df['route_name'].iloc[0]}")
+        return False
+    else:
+        return True
+
+def loops_fixer(df:pd.DataFrame):
+    """
+    Fixes loops using a relaxaation algorithm
+
+    Parameter: df, a gtfs combined stop & shape dataframe
+    Returns a corrected dataframe
+
+    Lilah Rosenfield | Utah Transit Authority
+    lilah.rosenfield@rideuta.com
+    """
+    df = df.copy()  
+    df['sub_string'] = np.nan
+    df.loc[df.index[0], 'cut_distance_stop_point'] = 0   # First stop
+    df.loc[df.index[-1], 'cut_distance_stop_point'] = 1  # Last stop
+    df = _diff_and_reproject(df)
+    df['cdsp_next_stop'] = df['cut_distance_stop_point'].shift(-1).fillna(1)
+    df['end_stop_name'] = df['stop_name'].shift(-1)
+    df['end_stop_id'] = df['stop_id'].shift(-1)
+    df = df.iloc[:-1]
+    df['geometry'] = df.apply(_final_substring, axis=1)
+    return df
+
+def _diff_and_reproject(df:pd.DataFrame, 
+                        max_iterations:int = 50):
+    """
+    Iterates outwards from identified discontinuities in the linestring from
+        the sequence, looping until it finds a fix.
+    
+    Returns a corrected df.
+
+    My initial implementation of this was recursive, which I liked, but
+    this version uses a while loop, which is more memory efficient.
+
+    Lilah Rosenfield | Utah Transit Authority 
+        (with the support of a large pile of linear algebra)
+    lilah.rosenfield@rideuta.com
+    """
+    df = df.sort_index(ascending=True)
+    iteration = 0
+    offset = 1
+    while iteration < max_iterations:
+        iteration += 1
+        df['cdsp_prev_stop'] = df['cut_distance_stop_point'].shift(offset).fillna(0)
+        df['cdsp_next_stop'] = df['cut_distance_stop_point'].shift(-offset).fillna(1)
+        df['prev_wrong'] = (df['cdsp_prev_stop'] > df['cut_distance_stop_point'])
+        df['next_wrong'] = (df['cdsp_next_stop'] < df['cut_distance_stop_point'])
+        if not (df['next_wrong'].any() or df['prev_wrong'].any()):
+            break
+        df['prev_cdsp'] = df['cut_distance_stop_point'].copy()
+
+        # Fix Pattern
+        df['sub_string'] = df[df['next_wrong'] | df['prev_wrong']].apply(
+            _substring_general, axis=1
+        )
+        df['substproj'] = df['sub_string'].project(
+            df['geometry_stop'], normalized = True)
+        
+        # Convert back to full line coordinates
+        df['substproj'] = (
+            df['substproj']*
+            (df['cdsp_next_stop']-df['cdsp_prev_stop'])+
+            df['cdsp_prev_stop'])
+        valid_update = (
+            (df['substproj'] < df['cdsp_next_stop']) & 
+            (df['substproj'] > df['cdsp_prev_stop'])
+            )
+        df['cut_distance_stop_point'][valid_update] = df['substproj']
+        tester = df['prev_cdsp'] != df['cut_distance_stop_point']
+        if tester.any():
+            logging.info("Made corrections, re-setting offset to 1")
+            offset=1
+        else:
+            logging.info("No corrections make, increasing offset")
+            offset = offset+1
+            if offset > len(df) // 2:
+                raise pd.errors.InvalidIndexError("Offset got too large!")
+    if iteration >= max_iterations:
+        logging.warning("Maximum iteration depth reached for shape id "
+                        f"{df['shape_id'].iloc[0]}. You are likely to"
+                        "encounter further errors")
+    return df
+
+
+def _final_substring(ser:pd.Series):
+    subst = substring(ser['geometry_shape'],
+                      ser['cut_distance_stop_point'],
+                      ser['cdsp_next_stop'],
+                      normalized = True)
+    if type(subst) == Point:
+        logging.warning(f"Segment between {ser['stop_name']} and "
+                    f"{ser['end_stop_name']} on {ser['route_name']}"
+                    "is a point! This is likely due to a out-of-spec "
+                    "GTFS implementation! We're returning the segment with "
+                    "an empty linestring instead.")
+        return LineString()
+    return subst
+
+def _substring_general(ser:pd.Series):
+    """
+    Applied substringification function for _diff_and_reproject
+    """
+    logging.info(f'Trying {ser['stop_name']} of line {ser['route_name']}')
+    subst =  substring(ser['geometry_shape'],
+                                    ser['cdsp_prev_stop'],
+                                    ser['cdsp_next_stop'],
+                                    normalized=True)
+    if type(subst) == Point:
+        logging.warning("Got a point from the substring function!")
+        logging.warning("This is probably a single-stop deviation, "
+        "in which case you are safe to ignore.")
+        logging.warning("However, if the loop fix fails, " \
+        "your feed may have a corner case")
+        return ser['geometry_shape']
+    else:
+        return subst
+
 
 
 def fix_outliers(speeds):

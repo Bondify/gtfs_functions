@@ -9,12 +9,15 @@ import io
 import pendulum as pl
 import hashlib
 from shapely.geometry import LineString, MultiPoint
+from shapely.ops import substring
 from gtfs_functions.aux_functions import (
     add_all_lines,
     add_runtime,
     add_distance,
     add_speed,
+    detect_loops,
     code,
+    loops_fixer,
     fix_outliers,
     num_to_letters,
     add_route_name,
@@ -52,6 +55,7 @@ class Feed:
         patterns: bool = True,
         start_date: str = None,
         end_date: str = None,
+        fix_loops: bool = False
     ):
 
         self._gtfs_path = gtfs_path
@@ -61,6 +65,7 @@ class Feed:
         self._patterns = patterns
         self._start_date = start_date
         self._end_date = end_date
+        self._fix_loops = fix_loops
         self._dates = None
         self._routes_patterns = None
         self._trips_patterns = None
@@ -280,6 +285,21 @@ class Feed:
         if self._dates_service_id is None:
             self._dates_service_id = self.get_dates_service_id()
         return self._dates_service_id
+    
+    @property
+    def loop_log(self):
+        """
+        A dataframe logging changes that have been made if fix_loops is enabled
+
+        Warns and returns false if disabled
+        """
+        if self._fix_loops:
+            self.get_segments()
+            return self._loop_log.copy()
+        else:
+            logging.warning("fix_loops is set to false, "
+                            "so loop_log does not exist!")
+            return False
 
     @trips.setter
     def trips(self, value):
@@ -866,17 +886,26 @@ class Feed:
         line_frequencies = line_frequencies.loc[~line_frequencies.geometry.isnull(), keep_these]
 
         return line_frequencies
+    
 
-    def get_segments(self):
-        """Splits each route's shape into stop-stop LineString called segments
+    def _segments_helper(self):
+        """
+        Splits each route's shape into stop-stop LineString called segments
 
-        Returns the segment geometry as well as additional segment information
+        This part just gets the segment geometry, and returns. Addtional
+        segment information is added in the main get_segments function.
+
+        Lilah Rosenfield | Utah Transit Authority
+        lilah.rosenfield@rideuta.com
         """
         logging.info("Getting segments...")
         stop_times = self.stop_times
         shapes = self.shapes
 
-        req_columns = ["shape_id", "stop_sequence", "stop_id", "geometry"]
+        # added route_pattern to handle the corner case two patterns can
+        # Have the same linestring but different stops
+        req_columns = ["shape_id", "stop_sequence", "stop_id", "geometry", 
+                       "route_pattern"]
         add_columns = ["route_id", "route_name", "direction_id", "stop_name"]
 
         # merge stop_times and shapes to calculate cut distance and interpolated point
@@ -886,15 +915,29 @@ class Feed:
             .merge(shapes, on="shape_id", suffixes=("_stop", "_shape"))
         )
         logging.info("Projecting stops onto shape...")
-        df_shape_stop["cut_distance_stop_point"] = df_shape_stop[["geometry_stop", "geometry_shape"]].apply(
-            lambda x: x[1].project(x[0], normalized=True), axis=1
-        )
-        logging.info("Interpolating stops onto shape...")
-        df_shape_stop["projected_stop_point"] = df_shape_stop[["geometry_shape", "cut_distance_stop_point"]].apply(
-            lambda x: x[0].interpolate(x[1], normalized=True), axis=1
-        )
+        df_shape_stop["cut_distance_stop_point"] = \
+            df_shape_stop['geometry_shape'].project(
+                df_shape_stop['geometry_stop'], normalized=True
+                )
+        df_shape_stop_group = df_shape_stop.groupby(["shape_id","route_pattern"])
+        test = df_shape_stop_group.apply(detect_loops)
+        if not self._fix_loops and test.any():
+            logging.warning("Detected looped routes! It is recommended you "
+                            "re-initialize the feed with fix_loops enabled")
+            segment_df = self._segments_helper_noloopfix(df_shape_stop)
+        if test.any() and self._fix_loops:
+            segment_df = self._segments_helper_with_loopfix(df_shape_stop_group, df_shape_stop)
+        
+        return segment_df
 
+    def _segments_helper_noloopfix(self, df_shape_stop:pd.DataFrame):
+        stop_times = self.stop_times
+        shapes = self.shapes
+        logging.info("Interpolating stops onto shape...")
         # calculate cut distance for
+        df_shape_stop["projected_stop_point"] = df_shape_stop[["geometry_shape", "cut_distance_stop_point"]].apply(
+            lambda x: x[0].interpolate(x[1], normalized=True), axis=1)
+        
         logging.info("Sorting shape points and stops...")
         df_shape = shapes[shapes.shape_id.isin(stop_times.shape_id.unique())]
         df_shape["list_of_points"] = df_shape.geometry.apply(lambda x: list(MultiPoint(x.coords).geoms))
@@ -957,7 +1000,47 @@ class Feed:
             ],
             axis=1,
             inplace=True,
-        )
+            )
+        return segment_df
+
+    def _segments_helper_with_loopfix(self, df_shape_stop_group, df_shape_stop):
+            old_cdsp = df_shape_stop["cut_distance_stop_point"]
+            fixed_loops = df_shape_stop_group.apply(loops_fixer)
+            df_shape_stop = fixed_loops.droplevel([0,1])
+
+            # Double checking may add a bit of inefficiency 
+            # but we'll do it anyway
+            df_shape_stop_group = df_shape_stop.groupby(["shape_id","route_pattern"])
+            logging.info("Finished fixing loops!")
+            test = df_shape_stop_group.apply(detect_loops)
+            if test.any():
+                logging.warning("Warning we were not able to fix all loops!")
+            new_cdsp = df_shape_stop["cut_distance_stop_point"]
+            #changes_made = new_cdsp != old_cdsp
+            self._loop_log = pd.concat([
+                             df_shape_stop[['stop_id', 'stop_sequence']], 
+                             old_cdsp.rename('old_cut_distance'),
+                             new_cdsp.rename('new_cut_distance'), 
+                             #changes_made.rename('changed')
+                            ], axis=1)
+            df_shape_stop = df_shape_stop.drop(
+                ['cdsp_prev_stop','cdsp_next_stop','prev_wrong',
+                 'next_wrong','prev_cdsp','substproj', 'sub_string'], axis=1)
+            return df_shape_stop
+
+
+    def get_segments(self):
+        """Splits each route's shape into stop-stop LineString called segments
+
+        Returns the segment geometry as well as additional segment information
+
+        If fix_loops is set to true on init, will attempt experimental
+            loop-resolution loop.
+        """
+        #stop_times = self.stop_times
+        #shapes = self.shapes
+        segment_gdf = self._segments_helper()
+ 
         segment_gdf.crs = "EPSG:4326"
 
         # Add segment length in meters
@@ -972,6 +1055,7 @@ class Feed:
             "shape_id",
             "route_id",
             "route_name",
+            "route_pattern",
             "direction_id",
             "stop_sequence",
             "segment_name",
