@@ -29,6 +29,7 @@ setup(
         "jenkspy>=0.3.2",
         "folium>=0.14.0",
         "unicode>=2.9",
+        "boto3",
     ],
     classifiers=[
         "Development Status :: 5 - Production/Stable",
